@@ -1,0 +1,39 @@
+workflows:
+  android-workflow:
+    name: Android Workflow
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      flutter: 3.35.4
+      groups:
+        - google_play
+      vars:
+        PACKAGE_NAME: "com.rehabnexus.rehab"
+        GOOGLE_PLAY_TRACK: "internal"
+    scripts:
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Flutter analyze
+        script: |
+          flutter analyze
+      - name: Build APK
+        script: |
+          flutter build apk --release --split-per-abi
+    artifacts:
+      - build/**/outputs/**/*.apk
+      - build/**/outputs/**/mapping.txt
+    publishing:
+      email:
+        recipients:
+          - tjddms30700@byte.com
+        notify:
+          success: true
+          failure: true
+      scripts:
+        - name: Success message
+          script: |
+            echo "✅ APK 빌드 성공! 아티팩트에서 다운로드하세요."
