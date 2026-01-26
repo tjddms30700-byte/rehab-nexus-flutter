@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "79236393316",
+    "project_id": "rehab-nexus-korea",
+    "storage_bucket": "rehab-nexus-korea.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:79236393316:android:b270268491b95feaf7b271",
+        "android_client_info": {
+          "package_name": "com.rehabnexus.rehab"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5SYKPtvyTVMIMOO_AVIOodGZEj9jNHpM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
