@@ -1,0 +1,114 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.35.4'
+        channel: 'stable'
+    
+    - name: Get dependencies
+      run: flutter pub get
+    
+    - name: Run tests
+      run: flutter test --no-pub
+      continue-on-error: true
+    
+    - name: Build APK (arm64-v8a)
+      run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+    
+    - name: Build APK (armeabi-v7a)
+      run: flutter build apk --release --target-platform android-arm --split-per-abi
+    
+    - name: Build APK (x86_64)
+      run: flutter build apk --release --target-platform android-x64 --split-per-abi
+    
+    - name: Build Universal APK
+      run: flutter build apk --release
+    
+    - name: Get APK info
+      run: |
+        echo "📦 APK Build Complete!"
+        ls -lh build/app/outputs/flutter-apk/
+        echo "---"
+        echo "📱 APK Files:"
+        find build/app/outputs/flutter-apk/ -name "*.apk" -type f
+    
+    - name: Upload arm64-v8a APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: rehab-nexus-arm64-v8a
+        path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+    
+    - name: Upload armeabi-v7a APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: rehab-nexus-armeabi-v7a
+        path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+    
+    - name: Upload x86_64 APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: rehab-nexus-x86_64
+        path: build/app/outputs/flutter-apk/app-x86_64-release.apk
+    
+    - name: Upload Universal APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: rehab-nexus-universal
+        path: build/app/outputs/flutter-apk/app-release.apk
+    
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v1.0.${{ github.run_number }}
+        name: Release v1.0.${{ github.run_number }}
+        body: |
+          ## 🏥 Rehab Nexus v1.0.${{ github.run_number }}
+          
+          ### 📱 APK 다운로드
+          - **Universal APK** (모든 기기용, 권장)
+          - **arm64-v8a** (최신 Android 기기용)
+          - **armeabi-v7a** (구형 Android 기기용)
+          - **x86_64** (Intel 기기용)
+          
+          ### ✨ 주요 기능
+          - 🩺 운영 관리 모듈 (8개)
+          - 👨‍⚕️ 임상 기능 모듈 (6개)
+          - 👪 보호자 모듈 (4개)
+          - 🔥 Firebase 연동 (Seoul Region)
+          
+          ### 🛠 Tech Stack
+          - Flutter 3.35.4
+          - Firebase (Firestore + Auth + Storage)
+          - Material Design 3
+        files: |
+          build/app/outputs/flutter-apk/app-release.apk
+          build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          build/app/outputs/flutter-apk/app-x86_64-release.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
