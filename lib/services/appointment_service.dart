@@ -34,60 +34,81 @@ class AppointmentService {
     }
   }
 
-  /// 보호자의 예약 목록 조회
+  /// 보호자의 예약 목록 조회 (인덱스 불필요 - 단순 쿼리)
   Future<List<Appointment>> getAppointmentsByGuardian(String guardianId) async {
     try {
       final querySnapshot = await _firestore
           .collection(_collectionName)
           .where('guardian_id', isEqualTo: guardianId)
-          .orderBy('appointment_date', descending: true)
+          // orderBy 제거: 앱에서 정렬 처리 (복합 인덱스 불필요)
           .get();
 
-      return querySnapshot.docs
+      final appointments = querySnapshot.docs
           .map((doc) => Appointment.fromFirestore(doc.data(), doc.id))
           .toList();
+      
+      // 앱에서 정렬 (최신순)
+      appointments.sort((a, b) => b.appointmentDate.compareTo(a.appointmentDate));
+      
+      return appointments;
     } catch (e) {
       throw Exception('예약 목록 조회 실패: $e');
     }
   }
 
-  /// 치료사의 예약 목록 조회
+  /// 치료사의 예약 목록 조회 (인덱스 불필요 - 단순 쿼리)
   Future<List<Appointment>> getAppointmentsByTherapist(String therapistId) async {
     try {
       final querySnapshot = await _firestore
           .collection(_collectionName)
           .where('therapist_id', isEqualTo: therapistId)
-          .orderBy('appointment_date', descending: false)
           .get();
 
-      return querySnapshot.docs
+      final appointments = querySnapshot.docs
           .map((doc) => Appointment.fromFirestore(doc.data(), doc.id))
           .toList();
+
+      // 앱에서 정렬 (인덱스 불필요)
+      appointments.sort((a, b) => a.appointmentDate.compareTo(b.appointmentDate));
+
+      return appointments;
     } catch (e) {
+      print('❌ 예약 목록 조회 실패: $e');
       throw Exception('예약 목록 조회 실패: $e');
     }
   }
 
-  /// 특정 날짜의 예약 목록 조회
+  /// 특정 날짜의 예약 목록 조회 (인덱스 불필요 - 단순 쿼리 + 앱 필터링)
   Future<List<Appointment>> getAppointmentsByDate(
     String therapistId,
     DateTime date,
   ) async {
     try {
-      final startOfDay = DateTime(date.year, date.month, date.day);
-      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
-
+      // 단순 쿼리: therapist_id만 필터링 (복합 인덱스 불필요)
       final querySnapshot = await _firestore
           .collection(_collectionName)
           .where('therapist_id', isEqualTo: therapistId)
-          .where('appointment_date', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
-          .where('appointment_date', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
           .get();
 
-      return querySnapshot.docs
+      final allAppointments = querySnapshot.docs
           .map((doc) => Appointment.fromFirestore(doc.data(), doc.id))
           .toList();
+
+      // 앱에서 날짜 필터링
+      final startOfDay = DateTime(date.year, date.month, date.day);
+      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+      
+      final filteredAppointments = allAppointments.where((appointment) {
+        return appointment.appointmentDate.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+               appointment.appointmentDate.isBefore(endOfDay.add(const Duration(seconds: 1)));
+      }).toList();
+
+      // 시간순 정렬
+      filteredAppointments.sort((a, b) => a.appointmentDate.compareTo(b.appointmentDate));
+
+      return filteredAppointments;
     } catch (e) {
+      print('❌ 날짜별 예약 조회 실패: $e');
       throw Exception('날짜별 예약 조회 실패: $e');
     }
   }

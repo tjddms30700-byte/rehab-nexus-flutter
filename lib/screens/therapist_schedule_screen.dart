@@ -6,10 +6,9 @@ import '../models/attendance.dart';
 import '../services/appointment_service.dart';
 import '../services/attendance_service.dart';
 import '../providers/app_state.dart';
-import '../constants/app_theme.dart';
 import '../constants/enums.dart';
 
-/// 치료사 일정 관리 화면
+/// 치료사 일정 관리 화면 - Firebase 연동
 class TherapistScheduleScreen extends StatefulWidget {
   const TherapistScheduleScreen({Key? key}) : super(key: key);
 
@@ -23,267 +22,173 @@ class _TherapistScheduleScreenState extends State<TherapistScheduleScreen> {
   final AttendanceService _attendanceService = AttendanceService();
 
   DateTime _selectedDate = DateTime.now();
-  List<Appointment> _todayAppointments = [];
-  List<Attendance> _todayAttendances = [];
-  bool _isLoading = false;
+  List<Appointment> _appointments = [];
+  List<Attendance> _attendances = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    print('🟢 [TherapistScheduleScreen] initState 호출됨');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      print('🟡 [TherapistScheduleScreen] addPostFrameCallback 실행');
-      _loadTodaySchedule();
-    });
+    _loadData();
   }
 
-  Future<void> _loadTodaySchedule() async {
-    print('🔵 [TherapistScheduleScreen] _loadTodaySchedule 시작');
-    
-    // ✅ mounted 체크 추가
-    if (!mounted) {
-      print('❌ [TherapistScheduleScreen] mounted=false, 종료');
-      return;
-    }
-    
-    final appState = context.read<AppState>();
-    final currentUser = appState.currentUser;
-    print('🟢 [TherapistScheduleScreen] currentUser: ${currentUser?.name ?? "null"}');
-
-    if (currentUser == null) {
-      print('❌ [TherapistScheduleScreen] currentUser가 null, 종료');
-      return;
-    }
-
-    // ✅ mounted 체크 후 setState
+  Future<void> _loadData() async {
     if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      print('📝 [TherapistScheduleScreen] Mock 데이터 생성 시작');
-      // Mock 데이터 생성 (Firebase 연결 전)
-      _todayAppointments = _generateMockAppointments(currentUser.id);
-      _todayAttendances = _generateMockAttendances(currentUser.id);
-      print('✅ [TherapistScheduleScreen] Mock 데이터 생성 완료: 예약 ${_todayAppointments.length}건, 출석 ${_todayAttendances.length}건');
+      final appState = context.read<AppState>();
+      final user = appState.currentUser;
 
-      // ✅ mounted 체크 후 setState
+      if (user == null) {
+        throw Exception('로그인이 필요합니다');
+      }
+
+      print('🔵 [일정관리] Firebase에서 예약 데이터 조회 시작...');
+      
+      // Firebase에서 모든 예약 조회 (단순 쿼리)
+      final allAppointments = await _appointmentService.getAppointmentsByTherapist(user.id);
+      print('✅ [일정관리] 예약 데이터 조회 완료: ${allAppointments.length}건');
+      
+      // 오늘 날짜 계산
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+      
+      // 앱에서 날짜 필터링 (오늘 예약만)
+      final todayAppointments = allAppointments.where((apt) {
+        final aptDate = DateTime(
+          apt.appointmentDate.year,
+          apt.appointmentDate.month,
+          apt.appointmentDate.day,
+        );
+        return aptDate.year == today.year &&
+               aptDate.month == today.month &&
+               aptDate.day == today.day;
+      }).toList();
+      
+      print('🔵 [일정관리] 오늘 예약: ${todayAppointments.length}건');
+
+      // 출석 데이터 조회 (실패해도 계속 진행)
+      List<Attendance> allAttendances = [];
+      try {
+        print('🔵 [일정관리] Firebase에서 출석 데이터 조회 시작...');
+        allAttendances = await _attendanceService.getAttendancesByTherapist(
+          user.id,
+          today,
+          tomorrow,
+        );
+        print('✅ [일정관리] 출석 데이터 조회 완료: ${allAttendances.length}건');
+      } catch (e) {
+        print('⚠️ [일정관리] 출석 데이터 조회 실패 (무시하고 계속): $e');
+        // 출석 데이터 없어도 계속 진행
+      }
+
       if (!mounted) return;
+
       setState(() {
+        _appointments = todayAppointments;
+        _attendances = allAttendances;
         _isLoading = false;
       });
-      print('✅ [TherapistScheduleScreen] setState 완료, 화면 렌더링 시작');
+
+      print('✅ [일정관리] 데이터 로드 완료: 예약 ${_appointments.length}건, 출석 ${_attendances.length}건');
     } catch (e) {
-      print('❌ [TherapistScheduleScreen] 오류 발생: $e');
-      print('❌ [TherapistScheduleScreen] Stack trace: ${StackTrace.current}');
-      // ✅ mounted 체크 후 setState 및 SnackBar
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('일정을 불러오는데 실패했습니다: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      print('❌ [일정관리] 데이터 로드 실패: $e');
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _errorMessage = 'Firebase 연결 오류\n\n오류 내용: ${e.toString()}\n\n새로고침 버튼을 눌러 다시 시도해주세요.';
+        _isLoading = false;
+      });
     }
-    print('🏁 [TherapistScheduleScreen] _loadTodaySchedule 완료');
-  }
-
-  List<Appointment> _generateMockAppointments(String therapistId) {
-    final now = DateTime.now();
-    return [
-      Appointment(
-        id: 'apt_001',
-        patientId: 'patient_001',
-        patientName: '홍길동',
-        guardianId: 'guardian_001',
-        therapistId: therapistId,
-        therapistName: '김치료',
-        appointmentDate: DateTime(now.year, now.month, now.day, 10, 0),
-        timeSlot: '10:00-11:00',
-        status: AppointmentStatus.confirmed,
-        notes: '수중 보행 훈련 요청',
-        createdAt: now.subtract(const Duration(days: 2)),
-      ),
-      Appointment(
-        id: 'apt_002',
-        patientId: 'patient_002',
-        patientName: '김영희',
-        guardianId: 'guardian_002',
-        therapistId: therapistId,
-        therapistName: '김치료',
-        appointmentDate: DateTime(now.year, now.month, now.day, 14, 0),
-        timeSlot: '14:00-15:00',
-        status: AppointmentStatus.confirmed,
-        notes: '균형 감각 개선 필요',
-        createdAt: now.subtract(const Duration(days: 1)),
-      ),
-      Appointment(
-        id: 'apt_003',
-        patientId: 'patient_003',
-        patientName: '이철수',
-        guardianId: 'guardian_003',
-        therapistId: therapistId,
-        therapistName: '김치료',
-        appointmentDate: DateTime(now.year, now.month, now.day, 16, 0),
-        timeSlot: '16:00-17:00',
-        status: AppointmentStatus.pending,
-        notes: null,
-        createdAt: now,
-      ),
-    ];
-  }
-
-  List<Attendance> _generateMockAttendances(String therapistId) {
-    final now = DateTime.now();
-    return [
-      Attendance(
-        id: 'att_001',
-        patientId: 'patient_001',
-        patientName: '홍길동',
-        sessionId: 'session_001',
-        scheduleDate: DateTime(now.year, now.month, now.day, 10, 0),
-        timeSlot: '10:00-11:00',
-        status: AttendanceStatus.present,
-        therapistId: therapistId,
-        therapistName: '김치료',
-        createdAt: now,
-      ),
-    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    print('🎨 [TherapistScheduleScreen] build 호출: _isLoading=$_isLoading, 예약=${_todayAppointments.length}건');
     return Scaffold(
       appBar: AppBar(
         title: const Text('일정 관리'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_month),
-            onPressed: _selectDate,
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 날짜 선택
-                    _buildDateSelector(),
-                    const SizedBox(height: 24),
+          : _errorMessage != null
+              ? _buildErrorView()
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 날짜 표시
+                      _buildDateCard(),
+                      const SizedBox(height: 24),
 
-                    // 오늘 일정 요약
-                    _buildTodaySummary(),
-                    const SizedBox(height: 24),
+                      // 오늘 일정 요약
+                      _buildSummarySection(),
+                      const SizedBox(height: 24),
 
-                    // 예약 목록
-                    _buildAppointmentList(),
-                    const SizedBox(height: 24),
+                      // 예약 목록
+                      _buildAppointmentsSection(),
+                      const SizedBox(height: 24),
 
-                    // 출석 현황
-                    _buildAttendanceList(),
-                  ],
+                      // 출석 현황
+                      _buildAttendancesSection(),
+                    ],
+                  ),
                 ),
-              ),
-            ),
     );
   }
 
-  Widget _buildDateSelector() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0x1A0077BE),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildErrorView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                DateFormat('yyyy년 MM월 dd일').format(_selectedDate),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                DateFormat('EEEE', 'ko_KR').format(_selectedDate),
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          const SizedBox(height: 16),
+          Text(
+            _errorMessage!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16),
           ),
+          const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: _selectDate,
-            icon: const Icon(Icons.calendar_today, size: 18),
-            label: const Text('날짜 선택'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-            ),
+            onPressed: _loadData,
+            icon: const Icon(Icons.refresh),
+            label: const Text('다시 시도'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTodaySummary() {
-    final confirmedCount = _todayAppointments
-        .where((apt) => apt.status == AppointmentStatus.confirmed)
-        .length;
-    final pendingCount = _todayAppointments
-        .where((apt) => apt.status == AppointmentStatus.pending)
-        .length;
-    final presentCount = _todayAttendances
-        .where((att) => att.status == AttendanceStatus.present)
-        .length;
-
+  Widget _buildDateCard() {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            const Text(
-              '📊 오늘 일정 요약',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            const Icon(Icons.calendar_today, size: 32, color: Colors.blue),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSummaryItem(
-                  '예약 확정',
-                  confirmedCount.toString(),
-                  Colors.blue,
-                ),
-                _buildSummaryItem(
-                  '승인 대기',
-                  pendingCount.toString(),
-                  Colors.orange,
-                ),
-                _buildSummaryItem(
-                  '출석 완료',
-                  presentCount.toString(),
-                  Colors.green,
+                const Text('선택된 날짜', style: TextStyle(fontSize: 12)),
+                Text(
+                  DateFormat('yyyy년 MM월 dd일 (E)', 'ko_KR').format(_selectedDate),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -293,275 +198,243 @@ class _TherapistScheduleScreenState extends State<TherapistScheduleScreen> {
     );
   }
 
-  Widget _buildSummaryItem(String label, String value, Color color) {
+  Widget _buildSummarySection() {
+    final confirmedCount = _appointments
+        .where((a) => a.status == AppointmentStatus.confirmed)
+        .length;
+    final pendingCount = _appointments
+        .where((a) => a.status == AppointmentStatus.pending)
+        .length;
+    final presentCount = _attendances
+        .where((a) => a.status == AttendanceStatus.present)
+        .length;
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+        const Text(
+          '📊 오늘 일정 요약',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryCard(
+                '예약 확정',
+                confirmedCount.toString(),
+                Colors.blue,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSummaryCard(
+                '승인 대기',
+                pendingCount.toString(),
+                Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSummaryCard(
+                '출석 완료',
+                presentCount.toString(),
+                Colors.green,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildAppointmentList() {
+  Widget _buildSummaryCard(String title, String value, Color color) {
+    return Card(
+      color: color.withOpacity(0.1),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppointmentsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           '📅 예약 목록',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        if (_todayAppointments.isEmpty)
-          Card(
+        if (_appointments.isEmpty)
+          const Card(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(32),
               child: Center(
-                child: Text(
-                  '오늘 예약이 없습니다',
-                  style: TextStyle(color: Colors.grey[600]),
+                child: Column(
+                  children: [
+                    Icon(Icons.event_busy, size: 48, color: Colors.grey),
+                    SizedBox(height: 8),
+                    Text('오늘 예약이 없습니다'),
+                  ],
                 ),
               ),
             ),
           )
         else
-          ..._todayAppointments.map((appointment) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: _getStatusColor(appointment.status),
-                  child: Text(
-                    appointment.patientName[0],
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-                title: Text(
-                  appointment.patientName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('🕐 ${appointment.timeSlot}'),
-                    if (appointment.notes != null)
-                      Text('📝 ${appointment.notes}'),
-                  ],
-                ),
-                trailing: _buildStatusChip(appointment.status),
-                onTap: () => _showAppointmentDetail(appointment),
-              ),
-            );
-          }).toList(),
+          ..._appointments.map((appointment) => _buildAppointmentCard(appointment)),
       ],
     );
   }
 
-  Widget _buildAttendanceList() {
+  Widget _buildAppointmentCard(Appointment appointment) {
+    Color statusColor = appointment.status == AppointmentStatus.confirmed
+        ? Colors.blue
+        : appointment.status == AppointmentStatus.pending
+            ? Colors.orange
+            : Colors.grey;
+
+    String statusText = appointment.status == AppointmentStatus.confirmed
+        ? '확정'
+        : appointment.status == AppointmentStatus.pending
+            ? '승인 대기'
+            : '취소됨';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withOpacity(0.2),
+          child: Icon(Icons.person, color: statusColor),
+        ),
+        title: Text(
+          appointment.patientName,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('⏰ ${appointment.timeSlot}'),
+            if (appointment.notes != null && appointment.notes!.isNotEmpty)
+              Text('📝 ${appointment.notes}'),
+          ],
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            statusText,
+            style: TextStyle(
+              color: statusColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        isThreeLine: appointment.notes != null && appointment.notes!.isNotEmpty,
+      ),
+    );
+  }
+
+  Widget _buildAttendancesSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           '✅ 출석 현황',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        if (_todayAttendances.isEmpty)
-          Card(
+        if (_attendances.isEmpty)
+          const Card(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(32),
               child: Center(
-                child: Text(
-                  '출석 기록이 없습니다',
-                  style: TextStyle(color: Colors.grey[600]),
+                child: Column(
+                  children: [
+                    Icon(Icons.event_available, size: 48, color: Colors.grey),
+                    SizedBox(height: 8),
+                    Text('출석 기록이 없습니다'),
+                  ],
                 ),
               ),
             ),
           )
         else
-          ..._todayAttendances.map((attendance) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                leading: Icon(
-                  _getAttendanceIcon(attendance.status),
-                  color: _getAttendanceColor(attendance.status),
-                  size: 32,
-                ),
-                title: Text(
-                  attendance.patientName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text('🕐 ${attendance.timeSlot}'),
-                trailing: Chip(
-                  label: Text(attendance.statusText),
-                  backgroundColor: _getAttendanceColor(attendance.status)
-                      .withValues(alpha: 0.2),
-                ),
-              ),
-            );
-          }).toList(),
+          ..._attendances.map((attendance) => _buildAttendanceCard(attendance)),
       ],
     );
   }
 
-  Widget _buildStatusChip(AppointmentStatus status) {
-    final color = _getStatusColor(status);
-    final text = status == AppointmentStatus.confirmed
-        ? '확정'
-        : status == AppointmentStatus.pending
-            ? '대기'
+  Widget _buildAttendanceCard(Attendance attendance) {
+    Color statusColor = attendance.status == AttendanceStatus.present
+        ? Colors.green
+        : attendance.status == AttendanceStatus.absent
+            ? Colors.red
+            : Colors.orange;
+
+    String statusText = attendance.status == AttendanceStatus.present
+        ? '출석'
+        : attendance.status == AttendanceStatus.absent
+            ? '결석'
             : '취소';
 
-    return Chip(
-      label: Text(
-        text,
-        style: const TextStyle(fontSize: 12, color: Colors.white),
-      ),
-      backgroundColor: color,
-      padding: EdgeInsets.zero,
-    );
-  }
-
-  Color _getStatusColor(AppointmentStatus status) {
-    switch (status) {
-      case AppointmentStatus.confirmed:
-        return Colors.blue;
-      case AppointmentStatus.pending:
-        return Colors.orange;
-      case AppointmentStatus.cancelled:
-        return Colors.red;
-      case AppointmentStatus.completed:
-        return Colors.green;
-    }
-  }
-
-  IconData _getAttendanceIcon(AttendanceStatus status) {
-    switch (status) {
-      case AttendanceStatus.present:
-        return Icons.check_circle;
-      case AttendanceStatus.absent:
-        return Icons.cancel;
-      case AttendanceStatus.cancelled:
-        return Icons.event_busy;
-      case AttendanceStatus.makeup:
-        return Icons.event_repeat;
-    }
-  }
-
-  Color _getAttendanceColor(AttendanceStatus status) {
-    switch (status) {
-      case AttendanceStatus.present:
-        return Colors.green;
-      case AttendanceStatus.absent:
-        return Colors.red;
-      case AttendanceStatus.cancelled:
-        return Colors.grey;
-      case AttendanceStatus.makeup:
-        return Colors.blue;
-    }
-  }
-
-  Future<void> _selectDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-      _loadTodaySchedule();
-    }
-  }
-
-  void _showAppointmentDetail(Appointment appointment) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('예약 상세: ${appointment.patientName}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withOpacity(0.2),
+          child: Icon(Icons.check_circle, color: statusColor),
+        ),
+        title: Text(
+          attendance.patientName,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('🕐 시간: ${appointment.timeSlot}'),
-            const SizedBox(height: 8),
-            Text('📅 날짜: ${DateFormat('yyyy-MM-dd').format(appointment.appointmentDate)}'),
-            const SizedBox(height: 8),
-            Text('📌 상태: ${appointment.statusText}'),
-            if (appointment.notes != null) ...[
-              const SizedBox(height: 8),
-              Text('📝 메모: ${appointment.notes}'),
-            ],
+            Text('⏰ ${attendance.timeSlot}'),
+            if (attendance.cancelReason != null && attendance.cancelReason!.isNotEmpty)
+              Text('📝 ${attendance.cancelReason}'),
           ],
         ),
-        actions: [
-          if (appointment.status == AppointmentStatus.pending) ...[
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _approveAppointment(appointment);
-              },
-              child: const Text('승인'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _rejectAppointment(appointment);
-              },
-              child: const Text('거절', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('닫기'),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
           ),
-        ],
+          child: Text(
+            statusText,
+            style: TextStyle(
+              color: statusColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ),
       ),
     );
-  }
-
-  void _approveAppointment(Appointment appointment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✅ ${appointment.patientName}님의 예약을 승인했습니다!'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-    _loadTodaySchedule();
-  }
-
-  void _rejectAppointment(Appointment appointment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('❌ ${appointment.patientName}님의 예약을 거절했습니다'),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-    _loadTodaySchedule();
   }
 }

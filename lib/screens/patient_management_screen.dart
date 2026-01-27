@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/patient.dart';
-import '../constants/app_theme.dart';
 import '../constants/enums.dart';
+import '../services/patient_service.dart';
+import '../providers/app_state.dart';
+import 'simple_patient_registration_screen.dart';
 
 /// 이용자 관리 화면
 class PatientManagementScreen extends StatefulWidget {
@@ -13,9 +16,11 @@ class PatientManagementScreen extends StatefulWidget {
 }
 
 class _PatientManagementScreenState extends State<PatientManagementScreen> {
+  final PatientService _patientService = PatientService();
   List<Patient> _patients = [];
   String _searchQuery = '';
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -23,66 +28,36 @@ class _PatientManagementScreenState extends State<PatientManagementScreen> {
     _loadPatients();
   }
 
-  void _loadPatients() {
+  Future<void> _loadPatients() async {
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
-    // Mock 데이터
-    _patients = [
-      Patient(
-        id: 'patient_001',
-        organizationId: 'org_001',
-        patientCode: 'P001',
-        name: '홍길동',
-        birthDate: DateTime(2016, 3, 15),
-        gender: 'M',
-        diagnosis: ['발달지연', '균형장애'],
-        assignedTherapistId: 'therapist_001',
-        status: PatientStatus.active,
-        createdAt: DateTime.now().subtract(const Duration(days: 30)),
-      ),
-      Patient(
-        id: 'patient_002',
-        organizationId: 'org_001',
-        patientCode: 'P002',
-        name: '김영희',
-        birthDate: DateTime(2015, 7, 20),
-        gender: 'F',
-        diagnosis: ['자폐 스펙트럼', '감각 통합 장애'],
-        assignedTherapistId: 'therapist_001',
-        status: PatientStatus.active,
-        createdAt: DateTime.now().subtract(const Duration(days: 45)),
-      ),
-      Patient(
-        id: 'patient_003',
-        organizationId: 'org_001',
-        patientCode: 'P003',
-        name: '이철수',
-        birthDate: DateTime(2017, 1, 10),
-        gender: 'M',
-        diagnosis: ['뇌성마비', '근력 저하'],
-        assignedTherapistId: 'therapist_001',
-        status: PatientStatus.active,
-        createdAt: DateTime.now().subtract(const Duration(days: 60)),
-      ),
-      Patient(
-        id: 'patient_004',
-        organizationId: 'org_001',
-        patientCode: 'P004',
-        name: '박지민',
-        birthDate: DateTime(2016, 11, 5),
-        gender: 'F',
-        diagnosis: ['발달 지연'],
-        assignedTherapistId: 'therapist_001',
-        status: PatientStatus.inactive,
-        createdAt: DateTime.now().subtract(const Duration(days: 90)),
-      ),
-    ];
+    try {
+      final appState = context.read<AppState>();
+      final user = appState.currentUser;
 
-    setState(() {
-      _isLoading = false;
-    });
+      if (user == null) {
+        throw Exception('로그인이 필요합니다');
+      }
+
+      print('🔵 Firebase에서 환자 데이터 조회 중...');
+      final patients = await _patientService.getPatientsByTherapist(user.id);
+
+      setState(() {
+        _patients = patients;
+        _isLoading = false;
+      });
+
+      print('✅ 환자 데이터 로드 완료: ${patients.length}건');
+    } catch (e) {
+      print('❌ 환자 데이터 로드 실패: $e');
+      setState(() {
+        _errorMessage = '환자 목록을 불러오는데 실패했습니다: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   List<Patient> get _filteredPatients {
@@ -96,6 +71,29 @@ class _PatientManagementScreenState extends State<PatientManagementScreen> {
         .toList();
   }
 
+  Widget _buildErrorView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          const SizedBox(height: 16),
+          Text(
+            _errorMessage!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _loadPatients,
+            icon: const Icon(Icons.refresh),
+            label: const Text('다시 시도'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -105,17 +103,21 @@ class _PatientManagementScreenState extends State<PatientManagementScreen> {
           IconButton(
             icon: const Icon(Icons.person_add),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('환자 등록 기능 (구현 예정)'),
-                  duration: Duration(seconds: 1),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SimplePatientRegistrationScreen(),
                 ),
-              );
+              ).then((_) => _loadPatients());
             },
           ),
         ],
       ),
-      body: Column(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? _buildErrorView()
+              : Column(
         children: [
           // 검색창
           Padding(
