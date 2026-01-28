@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import '../constants/app_theme.dart';
-import '../services/firestore_service.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../models/payment.dart';
+import '../services/payment_service.dart';
+import '../providers/app_state.dart';
+import 'payment_registration_screen.dart';
 
-/// 수납 내역 조회 화면
+/// 수납 관리 화면
 class PaymentListScreen extends StatefulWidget {
   const PaymentListScreen({super.key});
 
@@ -13,22 +15,16 @@ class PaymentListScreen extends StatefulWidget {
 }
 
 class _PaymentListScreenState extends State<PaymentListScreen> {
-  final FirestoreService _firestoreService = FirestoreService();
+  final _paymentService = PaymentService();
+  List<Payment> _payments = [];
+  List<Payment> _filteredPayments = [];
+  bool _isLoading = true;
+  String? _errorMessage;
   
-  List<Map<String, dynamic>> _payments = [];
-  bool _isLoading = false;
-  
-  // 필터 상태
-  String _selectedPeriod = '전체'; // 전체, 오늘, 이번주, 이번달
-  String _selectedPaymentMethod = '전체'; // 전체, 현금, 카드, 계좌이체
-  String _selectedStatus = '전체'; // 전체, 완료, 대기, 취소
-  
-  // 통계 데이터
-  int _totalPayments = 0;
-  int _totalAmount = 0;
-  int _cashAmount = 0;
-  int _cardAmount = 0;
-  int _transferAmount = 0;
+  // 필터 옵션
+  bool _showOnlyActualPayments = false;  // 실제 결제 건만 표시
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   @override
   void initState() {
@@ -36,351 +32,216 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
     _loadPayments();
   }
 
+  /// 결제 내역 로드
   Future<void> _loadPayments() async {
-    if (!mounted) return;
-    
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      // Mock 데이터 (Firebase 연동 전)
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      final now = DateTime.now();
-      
-      if (!mounted) return;
-      
-      setState(() {
-        _payments = [
-          {
-            'id': 'payment_001',
-            'patient_name': '홍길동',
-            'patient_code': 'P001',
-            'amount': 300000,
-            'payment_method': '카드',
-            'payment_date': now.subtract(const Duration(days: 1)),
-            'status': '완료',
-            'session_count': 8,
-            'discount': 0,
-            'notes': '12월 정기 수납',
-          },
-          {
-            'id': 'payment_002',
-            'patient_name': '김영희',
-            'patient_code': 'P002',
-            'amount': 250000,
-            'payment_method': '현금',
-            'payment_date': now.subtract(const Duration(days: 2)),
-            'status': '완료',
-            'session_count': 8,
-            'discount': 50000,
-            'notes': '형제 할인 적용',
-          },
-          {
-            'id': 'payment_003',
-            'patient_name': '박철수',
-            'patient_code': 'P003',
-            'amount': 350000,
-            'payment_method': '계좌이체',
-            'payment_date': now.subtract(const Duration(days: 5)),
-            'status': '완료',
-            'session_count': 10,
-            'discount': 0,
-            'notes': '',
-          },
-          {
-            'id': 'payment_004',
-            'patient_name': '이민수',
-            'patient_code': 'P004',
-            'amount': 300000,
-            'payment_method': '카드',
-            'payment_date': now.subtract(const Duration(days: 7)),
-            'status': '완료',
-            'session_count': 8,
-            'discount': 0,
-            'notes': '',
-          },
-          {
-            'id': 'payment_005',
-            'patient_name': '정수영',
-            'patient_code': 'P005',
-            'amount': 0,
-            'payment_method': '미정',
-            'payment_date': now,
-            'status': '대기',
-            'session_count': 8,
-            'discount': 0,
-            'notes': '수납 대기 중',
-          },
-        ];
-        
-        _calculateStatistics();
-        _isLoading = false;
-      });
+      final appState = Provider.of<AppState>(context, listen: false);
+      final currentUser = appState.currentUser;
+
+      if (currentUser == null) {
+        throw Exception('로그인이 필요합니다');
+      }
+
+      final payments = await _paymentService.getPaymentsByOrganization(
+        currentUser.organizationId,
+      );
+
+      if (mounted) {
+        setState(() {
+          _payments = payments;
+          _applyFilters();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      if (kDebugMode) {
-        print('수납 내역 로딩 오류: $e');
-      }
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _calculateStatistics() {
-    _totalPayments = 0;
-    _totalAmount = 0;
-    _cashAmount = 0;
-    _cardAmount = 0;
-    _transferAmount = 0;
-    
-    for (var payment in _getFilteredPayments()) {
-      if (payment['status'] == '완료') {
-        _totalPayments++;
-        final amount = payment['amount'] as int;
-        _totalAmount += amount;
-        
-        switch (payment['payment_method']) {
-          case '현금':
-            _cashAmount += amount;
-            break;
-          case '카드':
-            _cardAmount += amount;
-            break;
-          case '계좌이체':
-            _transferAmount += amount;
-            break;
-        }
+      if (mounted) {
+        setState(() {
+          _errorMessage = '결제 내역 로드 실패: $e';
+          _isLoading = false;
+        });
       }
     }
   }
 
-  List<Map<String, dynamic>> _getFilteredPayments() {
-    var filtered = _payments.where((payment) {
-      // 기간 필터
-      if (_selectedPeriod != '전체') {
-        final paymentDate = payment['payment_date'] as DateTime;
-        final now = DateTime.now();
-        
-        switch (_selectedPeriod) {
-          case '오늘':
-            if (paymentDate.day != now.day ||
-                paymentDate.month != now.month ||
-                paymentDate.year != now.year) {
-              return false;
-            }
-            break;
-          case '이번주':
-            final weekAgo = now.subtract(const Duration(days: 7));
-            if (paymentDate.isBefore(weekAgo)) {
-              return false;
-            }
-            break;
-          case '이번달':
-            if (paymentDate.month != now.month ||
-                paymentDate.year != now.year) {
-              return false;
-            }
-            break;
-        }
-      }
-      
-      // 결제수단 필터
-      if (_selectedPaymentMethod != '전체' &&
-          payment['payment_method'] != _selectedPaymentMethod) {
-        return false;
-      }
-      
-      // 상태 필터
-      if (_selectedStatus != '전체' &&
-          payment['status'] != _selectedStatus) {
-        return false;
-      }
-      
-      return true;
-    }).toList();
-    
-    // 날짜 역순 정렬
-    filtered.sort((a, b) {
-      final dateA = a['payment_date'] as DateTime;
-      final dateB = b['payment_date'] as DateTime;
-      return dateB.compareTo(dateA);
+  /// 필터 적용
+  void _applyFilters() {
+    var filtered = List<Payment>.from(_payments);
+
+    // 실제 결제 건만 표시
+    if (_showOnlyActualPayments) {
+      filtered = filtered.where((p) => p.isActualPayment).toList();
+    }
+
+    // 날짜 필터
+    if (_startDate != null && _endDate != null) {
+      filtered = filtered.where((p) {
+        return p.createdAt.isAfter(_startDate!) &&
+               p.createdAt.isBefore(_endDate!.add(const Duration(days: 1)));
+      }).toList();
+    }
+
+    setState(() {
+      _filteredPayments = filtered;
     });
+  }
+
+  /// 통계 계산
+  Map<String, dynamic> _calculateStatistics() {
+    final actualPayments = _filteredPayments.where((p) => p.isActualPayment);
     
-    return filtered;
+    final totalAmount = actualPayments.fold<double>(
+      0,
+      (sum, payment) => sum + payment.finalAmount,
+    );
+
+    final cashAmount = actualPayments
+        .where((p) => p.paymentMethod == PaymentMethod.cash)
+        .fold<double>(0, (sum, p) => sum + p.finalAmount);
+
+    final cardAmount = actualPayments
+        .where((p) => p.paymentMethod == PaymentMethod.card)
+        .fold<double>(0, (sum, p) => sum + p.finalAmount);
+
+    final transferAmount = actualPayments
+        .where((p) => p.paymentMethod == PaymentMethod.transfer)
+        .fold<double>(0, (sum, p) => sum + p.finalAmount);
+
+    return {
+      'total': totalAmount,
+      'count': actualPayments.length,
+      'cash': cashAmount,
+      'card': cardAmount,
+      'transfer': transferAmount,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredPayments = _getFilteredPayments();
-    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('💰 수납 내역'),
+        title: const Text('수납 관리'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _showPaymentDialog,
-            tooltip: '수납 등록',
-          ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: () {
-              // TODO: 통계 화면으로 이동
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('통계 화면은 개발 중입니다')),
-              );
-            },
-            tooltip: '통계 보기',
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadPayments,
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const PaymentRegistrationScreen(),
+            ),
+          );
+          if (result == true) {
+            _loadPayments();
+          }
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('수납 등록'),
+        backgroundColor: Colors.teal,
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // 통계 요약 카드
-                Container(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildStatItem('총 수납', '$_totalPayments건'),
-                          _buildStatItem(
-                            '총 금액',
-                            '${NumberFormat('#,###').format(_totalAmount)}원',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildStatItem(
-                            '현금',
-                            '${NumberFormat('#,###').format(_cashAmount)}원',
-                            color: Colors.green,
-                          ),
-                          _buildStatItem(
-                            '카드',
-                            '${NumberFormat('#,###').format(_cardAmount)}원',
-                            color: Colors.blue,
-                          ),
-                          _buildStatItem(
-                            '계좌이체',
-                            '${NumberFormat('#,###').format(_transferAmount)}원',
-                            color: Colors.orange,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+          : _errorMessage != null
+              ? _buildErrorWidget()
+              : Column(
+                  children: [
+                    _buildStatisticsCard(),
+                    _buildFilterBar(),
+                    Expanded(child: _buildPaymentList()),
+                  ],
                 ),
-                
-                // 필터 버튼
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildFilterChip(
-                          label: '전체',
-                          isSelected: _selectedPeriod == '전체',
-                          onTap: () => setState(() {
-                            _selectedPeriod = '전체';
-                            _calculateStatistics();
-                          }),
-                        ),
-                        _buildFilterChip(
-                          label: '오늘',
-                          isSelected: _selectedPeriod == '오늘',
-                          onTap: () => setState(() {
-                            _selectedPeriod = '오늘';
-                            _calculateStatistics();
-                          }),
-                        ),
-                        _buildFilterChip(
-                          label: '이번주',
-                          isSelected: _selectedPeriod == '이번주',
-                          onTap: () => setState(() {
-                            _selectedPeriod = '이번주';
-                            _calculateStatistics();
-                          }),
-                        ),
-                        _buildFilterChip(
-                          label: '이번달',
-                          isSelected: _selectedPeriod == '이번달',
-                          onTap: () => setState(() {
-                            _selectedPeriod = '이번달';
-                            _calculateStatistics();
-                          }),
-                        ),
-                        const SizedBox(width: 16),
-                        _buildFilterChip(
-                          label: '전체',
-                          isSelected: _selectedPaymentMethod == '전체',
-                          onTap: () => setState(() {
-                            _selectedPaymentMethod = '전체';
-                            _calculateStatistics();
-                          }),
-                        ),
-                        _buildFilterChip(
-                          label: '현금',
-                          isSelected: _selectedPaymentMethod == '현금',
-                          onTap: () => setState(() {
-                            _selectedPaymentMethod = '현금';
-                            _calculateStatistics();
-                          }),
-                        ),
-                        _buildFilterChip(
-                          label: '카드',
-                          isSelected: _selectedPaymentMethod == '카드',
-                          onTap: () => setState(() {
-                            _selectedPaymentMethod = '카드';
-                            _calculateStatistics();
-                          }),
-                        ),
-                        _buildFilterChip(
-                          label: '계좌이체',
-                          isSelected: _selectedPaymentMethod == '계좌이체',
-                          onTap: () => setState(() {
-                            _selectedPaymentMethod = '계좌이체';
-                            _calculateStatistics();
-                          }),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                const Divider(height: 1),
-                
-                // 수납 목록
-                Expanded(
-                  child: filteredPayments.isEmpty
-                      ? const Center(
-                          child: Text('수납 내역이 없습니다'),
-                        )
-                      : ListView.builder(
-                          itemCount: filteredPayments.length,
-                          itemBuilder: (context, index) {
-                            final payment = filteredPayments[index];
-                            return _buildPaymentListItem(payment);
-                          },
-                        ),
-                ),
-              ],
-            ),
     );
   }
 
-  Widget _buildStatItem(String label, String value, {Color? color}) {
+  /// 통계 카드
+  Widget _buildStatisticsCard() {
+    final stats = _calculateStatistics();
+    final numberFormat = NumberFormat('#,###');
+
+    return Card(
+      margin: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '결제 통계 (실제 결제 건)',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildStatItem(
+                  '총 결제액',
+                  '${numberFormat.format(stats['total'])}원',
+                  Colors.green,
+                ),
+                _buildStatItem(
+                  '결제 건수',
+                  '${stats['count']}건',
+                  Colors.blue,
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildPaymentMethodStat('현금', stats['cash'] as double),
+                _buildPaymentMethodStat('카드', stats['card'] as double),
+                _buildPaymentMethodStat('계좌이체', stats['transfer'] as double),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 통계 항목
+  Widget _buildStatItem(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.grey,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 결제 방식별 통계
+  Widget _buildPaymentMethodStat(String label, double amount) {
+    final numberFormat = NumberFormat('#,###');
     return Column(
       children: [
         Text(
@@ -392,213 +253,325 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
+          '${numberFormat.format(amount)}원',
+          style: const TextStyle(
+            fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: color ?? AppTheme.primary,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildFilterChip({
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (_) => onTap(),
-        selectedColor: AppTheme.primary.withValues(alpha: 0.3),
+  /// 필터 바
+  Widget _buildFilterBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.grey[100],
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: CheckboxListTile(
+                  title: const Text('실제 결제 건만 표시'),
+                  subtitle: const Text('현금/카드/계좌이체만'),
+                  value: _showOnlyActualPayments,
+                  onChanged: (value) {
+                    setState(() {
+                      _showOnlyActualPayments = value ?? false;
+                      _applyFilters();
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.calendar_today),
+                onPressed: _showDateRangePicker,
+                tooltip: '기간 선택',
+              ),
+            ],
+          ),
+          if (_startDate != null && _endDate != null)
+            Chip(
+              label: Text(
+                '${DateFormat('yyyy-MM-dd').format(_startDate!)} ~ ${DateFormat('yyyy-MM-dd').format(_endDate!)}',
+              ),
+              onDeleted: () {
+                setState(() {
+                  _startDate = null;
+                  _endDate = null;
+                  _applyFilters();
+                });
+              },
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildPaymentListItem(Map<String, dynamic> payment) {
-    final paymentDate = payment['payment_date'] as DateTime;
-    final status = payment['status'] as String;
-    final amount = payment['amount'] as int;
-    
-    Color statusColor;
-    switch (status) {
-      case '완료':
-        statusColor = Colors.green;
-        break;
-      case '대기':
-        statusColor = Colors.orange;
-        break;
-      case '취소':
-        statusColor = Colors.red;
-        break;
-      default:
-        statusColor = Colors.grey;
+  /// 날짜 범위 선택
+  Future<void> _showDateRangePicker() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+        _applyFilters();
+      });
     }
+  }
+
+  /// 결제 목록
+  Widget _buildPaymentList() {
+    if (_filteredPayments.isEmpty) {
+      return const Center(
+        child: Text('결제 내역이 없습니다'),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: _filteredPayments.length,
+      itemBuilder: (context, index) {
+        final payment = _filteredPayments[index];
+        return _buildPaymentCard(payment);
+      },
+    );
+  }
+
+  /// 결제 카드
+  Widget _buildPaymentCard(Payment payment) {
+    final numberFormat = NumberFormat('#,###');
     
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: statusColor.withValues(alpha: 0.2),
+          backgroundColor: _getPaymentMethodColor(payment.paymentMethod),
           child: Icon(
-            status == '완료'
-                ? Icons.check_circle
-                : status == '대기'
-                    ? Icons.access_time
-                    : Icons.cancel,
-            color: statusColor,
+            _getPaymentMethodIcon(payment.paymentMethod),
+            color: Colors.white,
+            size: 20,
           ),
         ),
-        title: Row(
-          children: [
-            Text(
-              payment['patient_name'],
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: statusColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
+        title: Text(
+          payment.patientName,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(payment.description),
             const SizedBox(height: 4),
-            Text('${payment['patient_code']} • ${payment['session_count']}회권'),
-            Text(
-              DateFormat('yyyy-MM-dd HH:mm').format(paymentDate),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            Row(
+              children: [
+                Text(
+                  '${DateFormat('yyyy-MM-dd HH:mm').format(payment.createdAt)}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _getPaymentMethodColor(payment.paymentMethod).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    payment.paymentMethodName,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _getPaymentMethodColor(payment.paymentMethod),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            if (payment['discount'] > 0)
+            if (payment.memo != null && payment.memo!.isNotEmpty) ...[
+              const SizedBox(height: 4),
               Text(
-                '할인: -${NumberFormat('#,###').format(payment['discount'])}원',
-                style: const TextStyle(fontSize: 12, color: Colors.red),
+                '💬 ${payment.memo}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.blueGrey,
+                ),
               ),
+            ],
           ],
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            if (payment.discount > 0)
+              Text(
+                '${numberFormat.format(payment.amount)}원',
+                style: const TextStyle(
+                  fontSize: 12,
+                  decoration: TextDecoration.lineThrough,
+                  color: Colors.grey,
+                ),
+              ),
             Text(
-              '${NumberFormat('#,###').format(amount)}원',
-              style: TextStyle(
+              '${numberFormat.format(payment.finalAmount)}원',
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: status == '완료' ? AppTheme.primary : Colors.grey,
+                color: Colors.green,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              payment['payment_method'],
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
+            if (payment.useVoucher && payment.voucherSessions != null)
+              Text(
+                '횟수권 -${payment.voucherSessions}회',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.orange,
+                ),
               ),
-            ),
           ],
         ),
-        onTap: () => _showPaymentDetail(payment),
+        onTap: () => _showPaymentDetails(payment),
       ),
     );
   }
 
-  void _showPaymentDetail(Map<String, dynamic> payment) {
+  /// 결제 방식 아이콘
+  IconData _getPaymentMethodIcon(PaymentMethod method) {
+    switch (method) {
+      case PaymentMethod.cash:
+        return Icons.money;
+      case PaymentMethod.card:
+        return Icons.credit_card;
+      case PaymentMethod.transfer:
+        return Icons.account_balance;
+      case PaymentMethod.voucher:
+        return Icons.confirmation_number;
+      case PaymentMethod.other:
+        return Icons.more_horiz;
+    }
+  }
+
+  /// 결제 방식 색상
+  Color _getPaymentMethodColor(PaymentMethod method) {
+    switch (method) {
+      case PaymentMethod.cash:
+        return Colors.green;
+      case PaymentMethod.card:
+        return Colors.blue;
+      case PaymentMethod.transfer:
+        return Colors.purple;
+      case PaymentMethod.voucher:
+        return Colors.orange;
+      case PaymentMethod.other:
+        return Colors.grey;
+    }
+  }
+
+  /// 결제 상세 보기
+  void _showPaymentDetails(Payment payment) {
+    final numberFormat = NumberFormat('#,###');
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${payment['patient_name']} 수납 상세'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDetailRow('환자 코드', payment['patient_code']),
-              _buildDetailRow('수납 금액', '${NumberFormat('#,###').format(payment['amount'])}원'),
-              _buildDetailRow('결제 수단', payment['payment_method']),
-              _buildDetailRow('회권', '${payment['session_count']}회'),
-              if (payment['discount'] > 0)
+      builder: (context) {
+        return AlertDialog(
+          title: Text(payment.patientName),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDetailRow('결제 내용', payment.description),
+                _buildDetailRow('결제 방식', payment.paymentMethodName),
+                _buildDetailRow('담당자', payment.therapistName),
+                const Divider(),
+                _buildDetailRow('결제 금액', '${numberFormat.format(payment.amount)}원'),
+                if (payment.discount > 0)
+                  _buildDetailRow('할인 금액', '-${numberFormat.format(payment.discount)}원', color: Colors.red),
                 _buildDetailRow(
-                  '할인 금액',
-                  '-${NumberFormat('#,###').format(payment['discount'])}원',
-                  valueColor: Colors.red,
+                  '최종 금액',
+                  '${numberFormat.format(payment.finalAmount)}원',
+                  isBold: true,
+                  color: Colors.green,
                 ),
-              _buildDetailRow('상태', payment['status']),
-              _buildDetailRow(
-                '수납 일시',
-                DateFormat('yyyy-MM-dd HH:mm').format(payment['payment_date'] as DateTime),
-              ),
-              if (payment['notes'].toString().isNotEmpty)
-                _buildDetailRow('비고', payment['notes']),
-            ],
-          ),
-        ),
-        actions: [
-          if (payment['status'] == '대기')
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _processPayment(payment);
-              },
-              child: const Text('수납 처리'),
+                const Divider(),
+                _buildDetailRow(
+                  '결제 일시',
+                  DateFormat('yyyy-MM-dd HH:mm:ss').format(payment.createdAt),
+                ),
+                if (payment.useVoucher && payment.voucherSessions != null)
+                  _buildDetailRow('횟수권 차감', '${payment.voucherSessions}회'),
+                if (payment.memo != null && payment.memo!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    '메모',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(payment.memo!),
+                  ),
+                ],
+              ],
             ),
-          if (payment['status'] == '완료')
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _showCancelDialog(payment);
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
-              child: const Text('수납 취소'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('닫기'),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('닫기'),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
+  /// 상세 정보 행
+  Widget _buildDetailRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? color,
+  }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey,
-              ),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.grey,
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(color: valueColor),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: color,
             ),
           ),
         ],
@@ -606,70 +579,29 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
     );
   }
 
-  void _showPaymentDialog() {
-    // TODO: 수납 등록 화면
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('수납 등록'),
-        content: const Text('수납 등록 기능은 개발 중입니다.\n\n환자 선택, 금액 입력, 결제 수단 선택 등의 기능이 추가될 예정입니다.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('확인'),
+  /// 에러 위젯
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _errorMessage ?? '오류가 발생했습니다',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _loadPayments,
+            child: const Text('다시 시도'),
           ),
         ],
       ),
-    );
-  }
-
-  void _processPayment(Map<String, dynamic> payment) {
-    // TODO: 실제 수납 처리 로직
-    setState(() {
-      payment['status'] = '완료';
-      _calculateStatistics();
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${payment['patient_name']} 수납이 완료되었습니다')),
-    );
-  }
-
-  void _showCancelDialog(Map<String, dynamic> payment) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('수납 취소'),
-        content: Text('${payment['patient_name']}의 수납을 취소하시겠습니까?\n\n취소된 수납은 환불 처리가 필요합니다.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('아니오'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _cancelPayment(payment);
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text('예, 취소'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _cancelPayment(Map<String, dynamic> payment) {
-    // TODO: 실제 수납 취소 로직
-    setState(() {
-      payment['status'] = '취소';
-      _calculateStatistics();
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${payment['patient_name']} 수납이 취소되었습니다')),
     );
   }
 }
