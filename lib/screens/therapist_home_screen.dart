@@ -11,6 +11,9 @@ import 'file_library_screen.dart';
 import 'makeup_ticket_list_screen.dart';
 import 'voucher_list_screen.dart';
 import 'payment_list_screen.dart';
+// 임상 기능 화면 추가
+import 'clinical_feature_patient_selector.dart';
+import 'admin_settings_screen.dart';
 
 /// 치료사 홈 화면 - 반응형 웹/모바일
 class TherapistHomeScreen extends StatelessWidget {
@@ -246,6 +249,12 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                   title: '성과 추이',
                   value: 'progress',
                 ),
+                const Divider(height: 24),
+                _buildSidebarMenuItem(
+                  icon: Icons.settings,
+                  title: '환경설정',
+                  value: 'settings',
+                ),
               ],
             ),
           ),
@@ -398,6 +407,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
       case 'session': return '세션 기록';
       case 'goals': return '목표 관리';
       case 'progress': return '성과 추이';
+      case 'settings': return '환경설정';
       default: return '대시보드';
     }
   }
@@ -445,12 +455,20 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
       case 'register':
         content = const SimplePatientRegistrationScreen();
         break;
-      case 'session':
-      case 'goals':
-      case 'progress':
       case 'assessment':
-        // These screens require patient selection
-        content = _buildFeatureComingSoon(context, _getMenuTitle());
+        content = const ClinicalFeaturePatientSelector(featureType: 'assessment');
+        break;
+      case 'session':
+        content = const ClinicalFeaturePatientSelector(featureType: 'session');
+        break;
+      case 'goals':
+        content = const ClinicalFeaturePatientSelector(featureType: 'goals');
+        break;
+      case 'progress':
+        content = _buildFeatureComingSoon(context, '성과 추이');
+        break;
+      case 'settings':
+        content = const AdminSettingsScreen();
         break;
       default:
         content = _buildDashboardContent(context, user);
