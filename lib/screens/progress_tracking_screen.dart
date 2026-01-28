@@ -38,12 +38,11 @@ class _ProgressTrackingScreenState extends State<ProgressTrackingScreen> {
     });
 
     try {
-      // 1. 평가 이력 조회
+      // 1. 평가 이력 조회 (인덱스 오류 방지: orderBy 제거)
       final assessmentsSnapshot = await FirebaseFirestore.instance
           .collection('assessments')
           .where('patient_id', isEqualTo: widget.patient.id)
-          .orderBy('assessment_date', descending: true)
-          .limit(10)
+          .limit(50)
           .get();
 
       _assessmentHistory = assessmentsSnapshot.docs.map((doc) {
@@ -55,13 +54,16 @@ class _ProgressTrackingScreenState extends State<ProgressTrackingScreen> {
           'score': data['total_score'] ?? 0,
         };
       }).toList();
+      
+      // 메모리에서 정렬
+      _assessmentHistory.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+      _assessmentHistory = _assessmentHistory.take(10).toList();
 
-      // 2. 세션 이력 조회
+      // 2. 세션 이력 조회 (인덱스 오류 방지: orderBy 제거)
       final sessionsSnapshot = await FirebaseFirestore.instance
           .collection('sessions')
           .where('patient_id', isEqualTo: widget.patient.id)
-          .orderBy('session_date', descending: true)
-          .limit(20)
+          .limit(50)
           .get();
 
       _sessionHistory = sessionsSnapshot.docs.map((doc) {
@@ -74,13 +76,15 @@ class _ProgressTrackingScreenState extends State<ProgressTrackingScreen> {
           'notes': data['notes'] ?? '',
         };
       }).toList();
+      
+      // 메모리에서 정렬
+      _sessionHistory.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+      _sessionHistory = _sessionHistory.take(20).toList();
 
-      // 3. 목표 진행도 조회
+      // 3. 목표 진행도 조회 (인덱스 오류 방지: where/orderBy 제거)
       final goalsSnapshot = await FirebaseFirestore.instance
           .collection('goals')
           .where('patient_id', isEqualTo: widget.patient.id)
-          .where('status', whereIn: ['IN_PROGRESS', 'ACHIEVED'])
-          .orderBy('created_at', descending: true)
           .get();
 
       _goalProgress = goalsSnapshot.docs.map((doc) {
@@ -92,6 +96,10 @@ class _ProgressTrackingScreenState extends State<ProgressTrackingScreen> {
           'status': data['status'] ?? 'IN_PROGRESS',
           'target_date': (data['target_date'] as Timestamp?)?.toDate(),
         };
+      }).where((goal) {
+        // 메모리에서 필터링
+        final status = goal['status'] as String;
+        return status == 'IN_PROGRESS' || status == 'ACHIEVED';
       }).toList();
 
       setState(() {
