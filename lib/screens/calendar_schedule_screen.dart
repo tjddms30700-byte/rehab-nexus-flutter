@@ -8,6 +8,7 @@ import '../models/patient.dart';
 import '../constants/enums.dart';
 import '../services/appointment_service.dart';
 import '../services/patient_service.dart';
+import '../widgets/create_appointment_dialog.dart'; // 새 다이얼로그 import
 
 /// 새로운 일정관리 화면 - 캘린더 + 치료사별 시간표
 class CalendarScheduleScreen extends StatefulWidget {
@@ -141,20 +142,21 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
   Future<void> _onTimeSlotTapped(String therapistId, String therapistName, int hour) async {
     final timeSlot = '${hour.toString().padLeft(2, '0')}:00-${(hour + 1).toString().padLeft(2, '0')}:00';
 
-    showDialog(
+    final result = await showDialog<bool>(
       context: context,
-      builder: (context) => _AppointmentCreateDialog(
+      builder: (context) => CreateAppointmentDialog(
         therapistId: therapistId,
         therapistName: therapistName,
         selectedDate: _selectedDate,
-        timeSlot: timeSlot,
+        initialTimeSlot: timeSlot,
         patients: _patients,
-        onCreated: () {
-          Navigator.pop(context);
-          _loadAppointments();
-        },
       ),
     );
+
+    // 예약 생성 성공 시 데이터 새로고침
+    if (result == true) {
+      _loadAppointments();
+    }
   }
 
   @override
@@ -198,11 +200,11 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
             child: _buildMiniCalendar(),
           ),
 
-          // 우측: 치료사별 시간표
+          // 우측: 일/주/월에 따라 다른 화면
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _buildScheduleTable(),
+                : _buildViewByMode(),
           ),
         ],
       ),
@@ -235,8 +237,22 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
     );
   }
 
-  /// 시간표 위젯
-  Widget _buildScheduleTable() {
+  /// 뷰 모드에 따른 화면 분기
+  Widget _buildViewByMode() {
+    switch (_viewMode) {
+      case '일':
+        return _buildDailyView();
+      case '주':
+        return _buildWeeklyView();
+      case '월':
+        return _buildMonthlyView();
+      default:
+        return _buildDailyView();
+    }
+  }
+
+  /// 일간 보기 (치료사별 시간표)
+  Widget _buildDailyView() {
     if (_therapists.isEmpty) {
       return const Center(child: Text('등록된 치료사가 없습니다'));
     }
@@ -457,182 +473,192 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
         return '';
     }
   }
+
+  /// 주간 보기 (7일 가로 레이아웃)
+  Widget _buildWeeklyView() {
+    // 선택된 주의 시작일(월요일)과 종료일(일요일) 계산
+    final weekStart = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
+    final weekDays = List.generate(7, (index) => weekStart.add(Duration(days: index)));
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // 주간 헤더
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.grey.shade100,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () {
+                    setState(() {
+                      _selectedDate = _selectedDate.subtract(const Duration(days: 7));
+                      _focusedDate = _selectedDate;
+                      _isLoading = true;
+                    });
+                    _loadAppointments();
+                  },
+                ),
+                Text(
+                  '${weekDays.first.year}년 ${weekDays.first.month}월 ${weekDays.first.day}일 ~ ${weekDays.last.month}월 ${weekDays.last.day}일',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: () {
+                    setState(() {
+                      _selectedDate = _selectedDate.add(const Duration(days: 7));
+                      _focusedDate = _selectedDate;
+                      _isLoading = true;
+                    });
+                    _loadAppointments();
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          // 주간 시간표 (간단한 버전)
+          DataTable(
+            columns: [
+              const DataColumn(label: Text('시간')),
+              ...weekDays.map((date) => DataColumn(
+                label: Text(
+                  '${date.month}/${date.day}\n${_getWeekdayText(date.weekday).substring(0, 1)}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: date.day == DateTime.now().day ? Colors.blue : Colors.black,
+                    fontWeight: date.day == DateTime.now().day ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              )),
+            ],
+            rows: List.generate(10, (index) {
+              final hour = 9 + index;
+              return DataRow(
+                cells: [
+                  DataCell(
+                    Container(
+                      width: 80,
+                      alignment: Alignment.center,
+                      child: Text('${hour.toString().padLeft(2, '0')}:00'),
+                    ),
+                  ),
+                  ...weekDays.map((date) {
+                    // 해당 날짜/시간의 예약 개수 표시
+                    return DataCell(
+                      Container(
+                        width: 80,
+                        height: 60,
+                        color: Colors.grey.shade50,
+                        child: const Center(
+                          child: Text('-', style: TextStyle(color: Colors.grey)),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 월간 보기 (캘린더 + 예약 개수)
+  Widget _buildMonthlyView() {
+    return Column(
+      children: [
+        // 월간 헤더
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.grey.shade100,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () {
+                  setState(() {
+                    _selectedDate = DateTime(_selectedDate.year, _selectedDate.month - 1);
+                    _focusedDate = _selectedDate;
+                  });
+                },
+              ),
+              Text(
+                '${_selectedDate.year}년 ${_selectedDate.month}월',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () {
+                  setState(() {
+                    _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1);
+                    _focusedDate = _selectedDate;
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // 큰 캘린더 (table_calendar 활용)
+        Expanded(
+          child: TableCalendar(
+            firstDay: DateTime.utc(2020, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: _focusedDate,
+            selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
+            onDaySelected: (selectedDate, focusedDate) {
+              setState(() {
+                _selectedDate = selectedDate;
+                _focusedDate = focusedDate;
+                _viewMode = '일'; // 날짜 클릭 시 일간 보기로 전환
+                _isLoading = true;
+              });
+              _loadAppointments();
+            },
+            calendarFormat: CalendarFormat.month,
+            headerVisible: false, // 헤더는 위에서 이미 만들었으므로 숨김
+            calendarStyle: CalendarStyle(
+              selectedDecoration: const BoxDecoration(
+                color: Colors.blue,
+                shape: BoxShape.circle,
+              ),
+              todayDecoration: BoxDecoration(
+                color: Colors.blue.shade200,
+                shape: BoxShape.circle,
+              ),
+              markerDecoration: const BoxDecoration(
+                color: Colors.pink,
+                shape: BoxShape.circle,
+              ),
+            ),
+            calendarBuilders: CalendarBuilders(
+              // 예약 개수 표시 (간단한 마커)
+              markerBuilder: (context, date, events) {
+                // TODO: 실제 예약 데이터 기반으로 마커 표시
+                return Positioned(
+                  bottom: 1,
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      color: Colors.pink,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// 예약 생성 다이얼로그
-class _AppointmentCreateDialog extends StatefulWidget {
-  final String therapistId;
-  final String therapistName;
-  final DateTime selectedDate;
-  final String timeSlot;
-  final List<Patient> patients;
-  final VoidCallback onCreated;
-
-  const _AppointmentCreateDialog({
-    required this.therapistId,
-    required this.therapistName,
-    required this.selectedDate,
-    required this.timeSlot,
-    required this.patients,
-    required this.onCreated,
-  });
-
-  @override
-  State<_AppointmentCreateDialog> createState() => _AppointmentCreateDialogState();
-}
-
-class _AppointmentCreateDialogState extends State<_AppointmentCreateDialog> {
-  Patient? _selectedPatient;
-  bool _isCreating = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('예약 생성'),
-      content: SizedBox(
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 치료사 정보
-            _buildInfoRow('치료사', widget.therapistName),
-            const SizedBox(height: 8),
-            // 날짜
-            _buildInfoRow('날짜', '${widget.selectedDate.year}-${widget.selectedDate.month.toString().padLeft(2, '0')}-${widget.selectedDate.day.toString().padLeft(2, '0')}'),
-            const SizedBox(height: 8),
-            // 시간
-            _buildInfoRow('시간', widget.timeSlot),
-            const Divider(height: 32),
-
-            // 환자 선택
-            const Text(
-              '환자 선택',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-
-            // 환자 목록
-            SizedBox(
-              height: 300,
-              child: widget.patients.isEmpty
-                  ? const Center(child: Text('등록된 환자가 없습니다'))
-                  : ListView.builder(
-                      itemCount: widget.patients.length,
-                      itemBuilder: (context, index) {
-                        final patient = widget.patients[index];
-                        return RadioListTile<Patient>(
-                          title: Text(patient.name),
-                          subtitle: Text('${patient.patientCode} | ${_getGenderText(patient.gender)}'),
-                          value: patient,
-                          groupValue: _selectedPatient,
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedPatient = value;
-                            });
-                          },
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('취소'),
-        ),
-        ElevatedButton(
-          onPressed: _selectedPatient == null || _isCreating ? null : _createAppointment,
-          child: _isCreating
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('예약 생성'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 60,
-          child: Text(
-            label,
-            style: TextStyle(color: Colors.grey.shade600),
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ],
-    );
-  }
-
-  String _getGenderText(String gender) {
-    switch (gender) {
-      case 'M':
-        return '남';
-      case 'F':
-        return '여';
-      default:
-        return '기타';
-    }
-  }
-
-  Future<void> _createAppointment() async {
-    if (_selectedPatient == null) return;
-
-    setState(() {
-      _isCreating = true;
-    });
-
-    try {
-      final appointmentTime = DateTime(
-        widget.selectedDate.year,
-        widget.selectedDate.month,
-        widget.selectedDate.day,
-        int.parse(widget.timeSlot.split(':')[0]),
-      );
-
-      final appointment = Appointment(
-        id: 'new_appointment_${DateTime.now().millisecondsSinceEpoch}',
-        patientId: _selectedPatient!.id,
-        patientName: _selectedPatient!.name,
-        guardianId: _selectedPatient!.guardianIds.isNotEmpty ? _selectedPatient!.guardianIds.first : '',
-        therapistId: widget.therapistId,
-        therapistName: widget.therapistName,
-        appointmentDate: appointmentTime,
-        timeSlot: widget.timeSlot,
-        status: AppointmentStatus.confirmed,
-        createdAt: DateTime.now(),
-      );
-
-      final appointmentService = AppointmentService();
-      await appointmentService.createAppointment(appointment);
-
-      print('✅ 예약 생성 완료: ${_selectedPatient!.name} - ${widget.timeSlot}');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('예약이 생성되었습니다')),
-      );
-
-      widget.onCreated();
-    } catch (e) {
-      print('❌ 예약 생성 실패: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('예약 생성 실패: $e')),
-      );
-    } finally {
-      setState(() {
-        _isCreating = false;
-      });
-    }
-  }
-}
