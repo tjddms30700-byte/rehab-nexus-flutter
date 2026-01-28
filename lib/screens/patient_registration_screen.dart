@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart';
-import '../constants/app_theme.dart';
-import '../models/patient.dart';
-import '../services/patient_service.dart';
-import '../providers/app_state.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// 환자 등록 화면 - 간단 버전
+/// 환자 등록 화면 (개선 버전)
 class PatientRegistrationScreen extends StatefulWidget {
-  const PatientRegistrationScreen({super.key});
+  const PatientRegistrationScreen({Key? key}) : super(key: key);
 
   @override
   State<PatientRegistrationScreen> createState() => _PatientRegistrationScreenState();
@@ -16,290 +11,428 @@ class PatientRegistrationScreen extends StatefulWidget {
 
 class _PatientRegistrationScreenState extends State<PatientRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _birthDateController = TextEditingController();
-  String _selectedGender = 'M';
-  final _diagnosisController = TextEditingController();
-  final _patientService = PatientService();
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (kDebugMode) {
-      print('🟢 PatientRegistrationScreen: initState called');
-    }
-  }
+  
+  // 기본 정보
+  final TextEditingController _nameController = TextEditingController();
+  String _gender = '남';
+  DateTime _birthDate = DateTime(2010, 1, 1);
+  final TextEditingController _phoneController = TextEditingController();
+  bool _smsConsent = true;
+  
+  // 상세 정보 (드롭다운 확장)
+  bool _showDetails = false;
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _visitPathController = TextEditingController();
+  final TextEditingController _memoController = TextEditingController();
+  
+  bool _isLoading = false;
 
   @override
   void dispose() {
     _nameController.dispose();
-    _birthDateController.dispose();
-    _diagnosisController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _visitPathController.dispose();
+    _memoController.dispose();
     super.dispose();
-  }
-
-  Future<void> _selectBirthDate() async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: DateTime(2016, 1, 1),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-    );
-    if (date != null) {
-      setState(() {
-        _birthDateController.text = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-      });
-    }
-  }
-
-  Future<void> _savePatient() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() {
-      _isSaving = true;
-    });
-
-    try {
-      final appState = Provider.of<AppState>(context, listen: false);
-      final currentUser = appState.currentUser;
-
-      if (currentUser == null) {
-        throw Exception('로그인 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
-      }
-
-      // 생년월일 파싱
-      final birthDateParts = _birthDateController.text.split('-');
-      final birthDate = DateTime(
-        int.parse(birthDateParts[0]),
-        int.parse(birthDateParts[1]),
-        int.parse(birthDateParts[2]),
-      );
-
-      // 진단명 파싱 (쉼표로 구분)
-      final diagnosisList = _diagnosisController.text
-          .split(',')
-          .map((d) => d.trim())
-          .where((d) => d.isNotEmpty)
-          .toList();
-
-      // Patient 객체 생성
-      final patient = Patient(
-        id: 'temp_${DateTime.now().millisecondsSinceEpoch}', // 임시 ID
-        organizationId: currentUser.organizationId,
-        patientCode: 'P${DateTime.now().millisecondsSinceEpoch % 10000}',
-        name: _nameController.text,
-        birthDate: birthDate,
-        gender: _selectedGender,
-        diagnosis: diagnosisList,
-        assignedTherapistId: currentUser.id,
-        createdAt: DateTime.now(),
-      );
-
-      // Firebase에 저장 시도
-      try {
-        final patientId = await _patientService.createPatient(patient);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ 환자 등록이 완료되었습니다!\nID: $patientId'),
-              backgroundColor: AppTheme.success,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-          Navigator.pop(context, patient);
-        }
-      } catch (firebaseError) {
-        // Firebase 오류 시 로컬에만 저장 (Mock)
-        if (kDebugMode) {
-          print('Firebase Error: $firebaseError');
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('✅ 환자 정보가 입력되었습니다!\n💡 Firebase 연결 시 실제 저장됩니다'),
-              backgroundColor: AppTheme.success,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-          Navigator.pop(context, patient);
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Patient Registration Error: $e');
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 환자 등록 실패: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (kDebugMode) {
-      print('🔵 PatientRegistrationScreen: build called');
-    }
-    
     return Scaffold(
       appBar: AppBar(
         title: const Text('환자 등록'),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-            // 안내 카드
-            Card(
-              color: const Color(0x1A0077BE), // AppTheme.primary with 10% opacity
-              child: const Padding(
-                padding: EdgeInsets.all(16),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '📝 환자 기본 정보',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    // 기본 정보 타이틀
+                    _buildSectionTitle('기본 정보'),
+                    const SizedBox(height: 16),
+
+                    // 이름
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _nameController,
+                            decoration: const InputDecoration(
+                              labelText: '이름 *',
+                              border: OutlineInputBorder(),
+                              hintText: '홍길동',
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return '이름을 입력하세요';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: _checkDuplicateName,
+                          icon: const Icon(Icons.search, size: 18),
+                          label: const Text('중복검색'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 성별
+                    Row(
+                      children: [
+                        const Text('성별 *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 24),
+                        Radio<String>(
+                          value: '남',
+                          groupValue: _gender,
+                          onChanged: (value) {
+                            setState(() {
+                              _gender = value!;
+                            });
+                          },
+                        ),
+                        const Text('남'),
+                        const SizedBox(width: 24),
+                        Radio<String>(
+                          value: '여',
+                          groupValue: _gender,
+                          onChanged: (value) {
+                            setState(() {
+                              _gender = value!;
+                            });
+                          },
+                        ),
+                        const Text('여'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 생년월일
+                    InkWell(
+                      onTap: _selectBirthDate,
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: '생년월일 *',
+                          border: OutlineInputBorder(),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('${_birthDate.year}년 ${_birthDate.month}월 ${_birthDate.day}일'),
+                            const Icon(Icons.calendar_today, color: Colors.grey),
+                          ],
+                        ),
                       ),
                     ),
-                    SizedBox(height: 8),
-                    Text(
-                      '새로운 환자의 기본 정보를 입력해주세요.',
-                      style: TextStyle(fontSize: 14),
+                    const SizedBox(height: 16),
+
+                    // 연락처
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _phoneController,
+                            decoration: const InputDecoration(
+                              labelText: '연락처 *',
+                              border: OutlineInputBorder(),
+                              hintText: '010-0000-0000',
+                            ),
+                            keyboardType: TextInputType.phone,
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return '연락처를 입력하세요';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: _checkDuplicatePhone,
+                          icon: const Icon(Icons.search, size: 18),
+                          label: const Text('중복검색'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 문자 수신 동의
+                    Row(
+                      children: [
+                        const Text('문자 수신', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 24),
+                        Radio<bool>(
+                          value: true,
+                          groupValue: _smsConsent,
+                          onChanged: (value) {
+                            setState(() {
+                              _smsConsent = value!;
+                            });
+                          },
+                        ),
+                        const Text('동의'),
+                        const SizedBox(width: 24),
+                        Radio<bool>(
+                          value: false,
+                          groupValue: _smsConsent,
+                          onChanged: (value) {
+                            setState(() {
+                              _smsConsent = value!;
+                            });
+                          },
+                        ),
+                        const Text('비동의'),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 상세정보 입력 드롭다운
+                    ExpansionTile(
+                      title: const Text('상세정보 입력', style: TextStyle(fontWeight: FontWeight.bold)),
+                      initiallyExpanded: _showDetails,
+                      onExpansionChanged: (expanded) {
+                        setState(() {
+                          _showDetails = expanded;
+                        });
+                      },
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              // 주소
+                              TextFormField(
+                                controller: _addressController,
+                                decoration: const InputDecoration(
+                                  labelText: '주소',
+                                  border: OutlineInputBorder(),
+                                  hintText: '서울시 강남구 테헤란로 123',
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // 방문 경로
+                              TextFormField(
+                                controller: _visitPathController,
+                                decoration: const InputDecoration(
+                                  labelText: '방문 경로',
+                                  border: OutlineInputBorder(),
+                                  hintText: '예) 지인 소개, 인터넷 검색',
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // 고객 메모
+                              TextFormField(
+                                controller: _memoController,
+                                decoration: const InputDecoration(
+                                  labelText: '고객 메모',
+                                  border: OutlineInputBorder(),
+                                  hintText: '특이사항 또는 메모',
+                                ),
+                                maxLines: 3,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+
+                    // 등록 버튼
+                    Center(
+                      child: ElevatedButton(
+                        onPressed: _registerPatient,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 64, vertical: 20),
+                        ),
+                        child: const Text(
+                          '환자 등록',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+    );
+  }
 
-            // 이름
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: '환자 이름 *',
-                hintText: '예: 홍길동',
-                prefixIcon: Icon(Icons.person),
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return '이름을 입력해주세요';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // 생년월일
-            TextFormField(
-              controller: _birthDateController,
-              decoration: const InputDecoration(
-                labelText: '생년월일 *',
-                hintText: 'YYYY-MM-DD',
-                prefixIcon: Icon(Icons.calendar_today),
-                border: OutlineInputBorder(),
-              ),
-              readOnly: true,
-              onTap: _selectBirthDate,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return '생년월일을 선택해주세요';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // 성별
-            DropdownButtonFormField<String>(
-              value: _selectedGender,
-              decoration: const InputDecoration(
-                labelText: '성별 *',
-                prefixIcon: Icon(Icons.wc),
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'M', child: Text('남성')),
-                DropdownMenuItem(value: 'F', child: Text('여성')),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedGender = value!;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // 진단명
-            TextFormField(
-              controller: _diagnosisController,
-              decoration: const InputDecoration(
-                labelText: '진단명 *',
-                hintText: '예: 발달지연, 균형장애',
-                prefixIcon: Icon(Icons.medical_information),
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return '진단명을 입력해주세요';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 32),
-
-            // 저장 버튼
-            ElevatedButton(
-              onPressed: _isSaving ? null : _savePatient,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: _isSaving
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Text(
-                      '환자 등록',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-            ),
-          ],
-        ),
-          ),
-        ),
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        color: Colors.blue,
       ),
     );
+  }
+
+  /// 생년월일 선택
+  Future<void> _selectBirthDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _birthDate = picked;
+      });
+    }
+  }
+
+  /// 이름 중복 검색
+  Future<void> _checkDuplicateName() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이름을 입력하세요')),
+      );
+      return;
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('patients')
+          .where('name', isEqualTo: name)
+          .get();
+
+      if (mounted) {
+        if (snapshot.docs.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✅ 사용 가능한 이름입니다'), backgroundColor: Colors.green),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ 동일한 이름의 환자 ${snapshot.docs.length}명이 있습니다'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('검색 실패: $e')),
+        );
+      }
+    }
+  }
+
+  /// 연락처 중복 검색
+  Future<void> _checkDuplicatePhone() async {
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('연락처를 입력하세요')),
+      );
+      return;
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('patients')
+          .where('phone', isEqualTo: phone)
+          .get();
+
+      if (mounted) {
+        if (snapshot.docs.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✅ 사용 가능한 연락처입니다'), backgroundColor: Colors.green),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ 이미 등록된 연락처입니다'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('검색 실패: $e')),
+        );
+      }
+    }
+  }
+
+  /// 환자 등록
+  Future<void> _registerPatient() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 환자 코드 생성 (P + 타임스탬프)
+      final patientCode = 'P${DateTime.now().millisecondsSinceEpoch}';
+
+      await FirebaseFirestore.instance.collection('patients').add({
+        'organization_id': 'org_rehab_nexus_001', // TODO: 실제 조직 ID로 변경
+        'patient_code': patientCode,
+        'name': _nameController.text.trim(),
+        'gender': _gender == '남' ? 'M' : 'F',
+        'birth_date': Timestamp.fromDate(_birthDate),
+        'phone': _phoneController.text.trim(),
+        'sms_consent': _smsConsent,
+        'address': _addressController.text.trim(),
+        'visit_path': _visitPathController.text.trim(),
+        'memo': _memoController.text.trim(),
+        'diagnosis': [],
+        'guardian_ids': [],
+        'assigned_therapist_id': '',
+        'status': 'ACTIVE',
+        'created_at': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ 환자가 등록되었습니다'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('등록 실패: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 }
