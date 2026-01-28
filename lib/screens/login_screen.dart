@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../utils/responsive_layout.dart';
 import '../constants/user_roles.dart';
+import '../services/auth_service.dart';
 import 'therapist_home_screen.dart';
 import 'guardian_home_screen.dart';
 
@@ -197,22 +198,23 @@ class _LoginScreenMobileState extends State<_LoginScreenMobile> {
     appState.clearError();
 
     try {
-      await Future.delayed(const Duration(seconds: 1));
-
       final email = _emailController.text.trim();
-      final mockUser = email.contains('therapist')
-          ? MockDataProvider.createMockTherapist()
-          : email.contains('admin')
-              ? MockDataProvider.createMockAdmin()
-              : MockDataProvider.createMockGuardian();
+      final password = _passwordController.text;
 
-      appState.setCurrentUser(mockUser);
+      // AuthService를 사용한 Firebase 로그인
+      final authService = AuthService();
+      final user = await authService.login(email, password);
+
+      appState.setCurrentUser(user);
 
       if (!mounted) return;
 
+      // 역할에 따라 홈 화면 결정
       Widget homeScreen;
-      switch (mockUser.role) {
+      switch (user.role) {
         case UserRole.therapist:
+        case UserRole.centerAdmin:
+        case UserRole.superAdmin:
           homeScreen = const TherapistHomeScreen();
           break;
         case UserRole.guardian:
@@ -617,22 +619,23 @@ class _LoginScreenDesktopState extends State<_LoginScreenDesktop> {
     appState.clearError();
 
     try {
-      await Future.delayed(const Duration(seconds: 1));
-
       final email = _emailController.text.trim();
-      final mockUser = email.contains('therapist')
-          ? MockDataProvider.createMockTherapist()
-          : email.contains('admin')
-              ? MockDataProvider.createMockAdmin()
-              : MockDataProvider.createMockGuardian();
+      final password = _passwordController.text;
 
-      appState.setCurrentUser(mockUser);
+      // AuthService를 사용한 Firebase 로그인
+      final authService = AuthService();
+      final user = await authService.login(email, password);
+
+      appState.setCurrentUser(user);
 
       if (!mounted) return;
 
+      // 역할에 따라 홈 화면 결정
       Widget homeScreen;
-      switch (mockUser.role) {
+      switch (user.role) {
         case UserRole.therapist:
+        case UserRole.centerAdmin:
+        case UserRole.superAdmin:
           homeScreen = const TherapistHomeScreen();
           break;
         case UserRole.guardian:

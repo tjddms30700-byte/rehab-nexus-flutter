@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../utils/responsive_layout.dart';
 import 'simple_patient_registration_screen.dart';
-import 'therapist_schedule_screen.dart';
+import 'calendar_schedule_screen.dart';
 import 'patient_management_screen.dart';
 import 'notice_list_screen.dart';
 import 'file_library_screen.dart';
@@ -422,7 +422,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
         content = _buildDashboardContent(context, user);
         break;
       case 'schedule':
-        content = const TherapistScheduleScreen();
+        content = const CalendarScheduleScreen();
         break;
       case 'patients':
         content = const PatientManagementScreen();
@@ -824,7 +824,7 @@ Widget _buildOperationsSection(BuildContext context) {
             title: '일정 관리',
             subtitle: '예약 및 출석',
             color: Colors.blue,
-            screen: const TherapistScheduleScreen(),
+            screen: const CalendarScheduleScreen(),
           ),
           _buildFeatureCard(
             context,
