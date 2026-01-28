@@ -35,8 +35,7 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
   String _classType = 'STANDARD'; // STANDARD, SPECIAL, MAKEUP
   int _sessionCount = 10;
   
-  // 예약금
-  int _depositAmount = 0;
+  // 예약금 제거됨
   
   // 메모
   final TextEditingController _memoController = TextEditingController();
@@ -93,12 +92,12 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.pink.shade50,
+                color: Colors.blue.shade50,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.event_note, color: Colors.pink),
+                  const Icon(Icons.event_note, color: Colors.blue),
                   const SizedBox(width: 8),
                   const Text(
                     '등록하기',
@@ -116,9 +115,9 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
             // 탭 바
             TabBar(
               controller: _tabController,
-              labelColor: Colors.pink,
+              labelColor: Colors.blue,
               unselectedLabelColor: Colors.grey,
-              indicatorColor: Colors.pink,
+              indicatorColor: Colors.blue,
               tabs: const [
                 Tab(text: '예약등록'),
                 Tab(text: '수업하기'),
@@ -160,7 +159,7 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
                     child: ElevatedButton(
                       onPressed: _isCreating ? null : _createAppointment,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.pink,
+                        backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
                       ),
                       child: _isCreating
@@ -206,12 +205,6 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
           _buildClassTypeSelector(),
           const SizedBox(height: 24),
           
-          // 예약금
-          _buildSectionTitle('예약금'),
-          const SizedBox(height: 8),
-          _buildDepositInput(),
-          const SizedBox(height: 24),
-          
           // 예약메모
           _buildSectionTitle('예약메모'),
           const SizedBox(height: 8),
@@ -230,10 +223,127 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
     );
   }
 
-  /// 수업하기 탭
+  /// 수업하기 탭 - 당일 수업 기록
   Widget _buildClassTab() {
-    return const Center(
-      child: Text('수업 관리 기능 (추후 구현)'),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '당일 수업 활동 체크',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          
+          // 활동 태그 선택
+          _buildActivityTagSection(),
+          const SizedBox(height: 24),
+          
+          // 수업 활동 내용
+          const Text(
+            '수업 활동 내용',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            maxLines: 5,
+            decoration: InputDecoration(
+              hintText: '오늘 수업 활동 내용을 작성하면 자동으로 활동 태그를 분석합니다',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // 발달 변화 요약
+          const Text(
+            '발달 변화 요약',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: '이번 수업에서 관찰된 발달 변화',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // 보호자 연계 포인트
+          const Text(
+            '보호자 연계 포인트',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: '가정에서 연계할 활동이나 주의사항',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// 활동 태그 섹션
+  Widget _buildActivityTagSection() {
+    final activityTags = [
+      '소근육', '대근육', '감각통합', '물적응',
+      '인지발달', '정서발달', '탐색능력', '신체능력',
+      '자기관리', '사회성', '시지각발달', '협응력', '창의력'
+    ];
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '활동 태그',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: activityTags.map((tag) {
+            return FilterChip(
+              label: Text(tag),
+              selected: false,
+              onSelected: (selected) {
+                // TODO: 태그 선택 로직
+              },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: const [
+              Icon(Icons.info_outline, size: 20, color: Colors.blue),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '수업 내용을 작성하면 AI가 자동으로 활동 태그를 추천합니다',
+                  style: TextStyle(fontSize: 12, color: Colors.blue),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -307,7 +417,7 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
                     final patient = widget.patients[index];
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: Colors.pink.shade100,
+                        backgroundColor: Colors.blue.shade100,
                         child: Text(patient.name[0]),
                       ),
                       title: Text(patient.name),
@@ -459,7 +569,7 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.pink.shade50,
+                  color: Colors.blue.shade50,
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 ),
                 child: Row(
@@ -580,9 +690,9 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
                   width: 70,
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? Colors.pink.shade100 : Colors.grey.shade100,
+                    color: isSelected ? Colors.blue.shade100 : Colors.grey.shade100,
                     border: Border.all(
-                      color: isSelected ? Colors.pink : Colors.grey.shade300,
+                      color: isSelected ? Colors.blue : Colors.grey.shade300,
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -688,40 +798,6 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
     );
   }
 
-  /// 예약금 입력
-  Widget _buildDepositInput() {
-    return Row(
-      children: [
-        // 하트 아이콘
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.pink.shade50,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.favorite, color: Colors.pink, size: 20),
-        ),
-        const SizedBox(width: 12),
-        
-        // 금액 입력
-        Expanded(
-          child: TextField(
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              hintText: '35,000',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-            onChanged: (value) {
-              _depositAmount = int.tryParse(value.replaceAll(',', '')) ?? 0;
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
   String _getWeekdayText(int weekday) {
     const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
     return weekdays[weekday - 1];
@@ -790,7 +866,7 @@ class _CreateAppointmentDialogState extends State<CreateAppointmentDialog> with 
         'status': 'CONFIRMED', // enum을 문자열로 직접 변환
         'session_type': _classType,
         'session_count': _sessionCount,
-        'deposit_amount': _depositAmount,
+        'deposit_amount': 0,
         'notes': _memoController.text.trim(),
         'created_at': FieldValue.serverTimestamp(),
       });

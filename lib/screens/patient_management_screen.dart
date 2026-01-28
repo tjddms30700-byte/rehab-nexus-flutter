@@ -4,7 +4,7 @@ import '../models/patient.dart';
 import '../constants/enums.dart';
 import '../services/patient_service.dart';
 import '../providers/app_state.dart';
-import 'simple_patient_registration_screen.dart';
+import 'patient_registration_screen.dart'; // 새로운 환자 등록 화면
 
 /// 이용자 관리 화면
 class PatientManagementScreen extends StatefulWidget {
@@ -172,13 +172,18 @@ class _PatientManagementScreenState extends State<PatientManagementScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.person_add),
+            tooltip: '환자 등록',
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const SimplePatientRegistrationScreen(),
+                  builder: (context) => const PatientRegistrationScreen(),
                 ),
-              ).then((_) => _loadPatients());
+              ).then((result) {
+                if (result == true) {
+                  _loadPatients();
+                }
+              });
             },
           ),
         ],
