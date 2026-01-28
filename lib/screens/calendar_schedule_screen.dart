@@ -38,13 +38,85 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
   // 환자 목록 (예약 생성용)
   List<Patient> _patients = [];
 
+  // 공휴일 목록
+  List<DateTime> _holidays = [];
+  
+  // 휴무일 목록 (정기 휴무)
+  Map<String, bool> _regularOffDays = {};
+
   // 로딩 상태
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _loadHolidays();
     _loadTherapists();
+  }
+
+  /// 공휴일 로드
+  Future<void> _loadHolidays() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('work_hours_settings')
+          .doc('main')
+          .get();
+      
+      if (snapshot.exists) {
+        final data = snapshot.data()!;
+        
+        // 정기 휴무일 (요일별)
+        _regularOffDays = {
+          'monday': data['monday_work'] == false,
+          'tuesday': data['tuesday_work'] == false,
+          'wednesday': data['wednesday_work'] == false,
+          'thursday': data['thursday_work'] == false,
+          'friday': data['friday_work'] == false,
+          'saturday': data['saturday_work'] == false,
+          'sunday': data['sunday_work'] == false,
+        };
+        
+        // 공휴일 목록
+        final holidays = data['holidays'] as List<dynamic>? ?? [];
+        _holidays = holidays.map((holiday) {
+          if (holiday is Map && holiday['date'] is Timestamp) {
+            return (holiday['date'] as Timestamp).toDate();
+          }
+          return null;
+        }).whereType<DateTime>().toList();
+      }
+    } catch (e) {
+      print('❌ 공휴일 로드 실패: $e');
+    }
+  }
+
+  /// 해당 날짜가 휴무일인지 확인
+  bool _isOffDay(DateTime date) {
+    // 공휴일 체크
+    for (var holiday in _holidays) {
+      if (holiday.year == date.year &&
+          holiday.month == date.month &&
+          holiday.day == date.day) {
+        return true;
+      }
+    }
+    
+    // 정기 휴무일 체크
+    final weekdayKey = _getWeekdayKey(date.weekday);
+    return _regularOffDays[weekdayKey] == true;
+  }
+  
+  String _getWeekdayKey(int weekday) {
+    switch (weekday) {
+      case 1: return 'monday';
+      case 2: return 'tuesday';
+      case 3: return 'wednesday';
+      case 4: return 'thursday';
+      case 5: return 'friday';
+      case 6: return 'saturday';
+      case 7: return 'sunday';
+      default: return 'sunday';
+    }
   }
 
   /// 치료사 목록 로드
@@ -140,6 +212,17 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
 
   /// 시간 슬롯 클릭 시 - 예약 생성 다이얼로그
   Future<void> _onTimeSlotTapped(String therapistId, String therapistName, int hour) async {
+    // 휴무일 체크
+    if (_isOffDay(_selectedDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('휴무일에는 예약을 생성할 수 없습니다'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     final timeSlot = '${hour.toString().padLeft(2, '0')}:00-${(hour + 1).toString().padLeft(2, '0')}:00';
 
     final result = await showDialog<bool>(
@@ -233,6 +316,42 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
           color: Colors.blue.shade200,
           shape: BoxShape.circle,
         ),
+        // 휴무일 스타일
+        disabledDecoration: BoxDecoration(
+          color: Colors.grey.shade300,
+          shape: BoxShape.circle,
+        ),
+        disabledTextStyle: const TextStyle(
+          color: Colors.grey,
+          decoration: TextDecoration.lineThrough,
+        ),
+      ),
+      // 휴무일 활성화 여부 결정
+      enabledDayPredicate: (day) {
+        return !_isOffDay(day);
+      },
+      // 휴무일 스타일 빌더
+      calendarBuilders: CalendarBuilders(
+        defaultBuilder: (context, day, focusedDay) {
+          if (_isOffDay(day)) {
+            return Container(
+              margin: const EdgeInsets.all(4),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '${day.day}',
+                style: const TextStyle(
+                  color: Colors.grey,
+                  decoration: TextDecoration.lineThrough,
+                ),
+              ),
+            );
+          }
+          return null;
+        },
       ),
     );
   }
@@ -263,15 +382,16 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
           // 날짜 헤더
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.grey.shade100,
+            color: _isOffDay(_selectedDate) ? Colors.grey.shade300 : Colors.grey.shade100,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   '${_selectedDate.year}년 ${_selectedDate.month}월 ${_selectedDate.day}일',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
+                    color: _isOffDay(_selectedDate) ? Colors.grey : Colors.black,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -279,9 +399,29 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
                   _getWeekdayText(_selectedDate.weekday),
                   style: TextStyle(
                     fontSize: 18,
-                    color: _selectedDate.weekday == 7 ? Colors.red : Colors.grey.shade700,
+                    color: _isOffDay(_selectedDate) 
+                        ? Colors.grey 
+                        : (_selectedDate.weekday == 7 ? Colors.red : Colors.grey.shade700),
                   ),
                 ),
+                if (_isOffDay(_selectedDate)) ...[
+                  const SizedBox(width: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      '휴무일',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

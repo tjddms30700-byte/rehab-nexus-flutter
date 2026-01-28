@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../utils/responsive_layout.dart';
-import 'simple_patient_registration_screen.dart';
+import 'patient_registration_screen.dart';
 import 'calendar_schedule_screen.dart';
 import 'patient_management_screen.dart';
 import 'notice_list_screen.dart';
@@ -453,7 +453,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
         content = const FileLibraryScreen();
         break;
       case 'register':
-        content = const SimplePatientRegistrationScreen();
+        content = const PatientRegistrationScreen();
         break;
       case 'assessment':
         content = const ClinicalFeaturePatientSelector(featureType: 'assessment');
@@ -465,7 +465,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
         content = const ClinicalFeaturePatientSelector(featureType: 'goals');
         break;
       case 'progress':
-        content = _buildFeatureComingSoon(context, '성과 추이');
+        content = const ClinicalFeaturePatientSelector(featureType: 'progress');
         break;
       case 'settings':
         content = const AdminSettingsScreen();
@@ -921,7 +921,7 @@ Widget _buildClinicalSection(BuildContext context) {
             title: '환자 등록',
             subtitle: '신규 등록',
             color: Colors.blue,
-            screen: const SimplePatientRegistrationScreen(),
+            screen: const PatientRegistrationScreen(),
           ),
         ],
       ),
