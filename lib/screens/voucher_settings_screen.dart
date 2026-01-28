@@ -62,6 +62,17 @@ class _VoucherSettingsScreenState extends State<VoucherSettingsScreen> {
     }
   }
 
+  Future<void> _editVoucher(Map<String, dynamic> voucher) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _AddVoucherDialog(existingVoucher: voucher),
+    );
+
+    if (result != null) {
+      await _updateVoucher(voucher['id'], result);
+    }
+  }
+
   Future<void> _saveVoucher(Map<String, dynamic> voucherData) async {
     try {
       await FirebaseFirestore.instance.collection('voucher_settings').add({
@@ -80,6 +91,32 @@ class _VoucherSettingsScreenState extends State<VoucherSettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('바우처 추가 실패: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateVoucher(String voucherId, Map<String, dynamic> voucherData) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('voucher_settings')
+          .doc(voucherId)
+          .update({
+        ...voucherData,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('바우처가 수정되었습니다')),
+        );
+      }
+
+      _loadVouchers();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('바우처 수정 실패: $e')),
         );
       }
     }
@@ -207,6 +244,10 @@ class _VoucherSettingsScreenState extends State<VoucherSettingsScreen> {
                   ),
                 ),
                 IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.blue),
+                  onPressed: () => _editVoucher(voucher),
+                ),
+                IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
                   onPressed: () => _deleteVoucher(voucher['id']),
                 ),
@@ -256,9 +297,11 @@ class _VoucherSettingsScreenState extends State<VoucherSettingsScreen> {
   }
 }
 
-/// 바우처 추가 다이얼로그
+/// 바우처 추가/수정 다이얼로그
 class _AddVoucherDialog extends StatefulWidget {
-  const _AddVoucherDialog();
+  final Map<String, dynamic>? existingVoucher;
+  
+  const _AddVoucherDialog({this.existingVoucher});
 
   @override
   State<_AddVoucherDialog> createState() => _AddVoucherDialogState();
@@ -272,6 +315,19 @@ class _AddVoucherDialogState extends State<_AddVoucherDialog> {
   final TextEditingController _baseAmountController = TextEditingController();
   final TextEditingController _supportPerSessionController = TextEditingController();
   final TextEditingController _selfPaymentController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingVoucher != null) {
+      _programNameController.text = widget.existingVoucher!['program_name'] ?? '';
+      _classNameController.text = widget.existingVoucher!['class_name'] ?? '';
+      _sessionsController.text = (widget.existingVoucher!['sessions'] ?? 0).toString();
+      _baseAmountController.text = (widget.existingVoucher!['base_amount'] ?? 0).toString();
+      _supportPerSessionController.text = (widget.existingVoucher!['support_per_session'] ?? 0).toString();
+      _selfPaymentController.text = (widget.existingVoucher!['self_payment'] ?? 0).toString();
+    }
+  }
 
   @override
   void dispose() {

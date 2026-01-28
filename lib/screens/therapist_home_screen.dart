@@ -609,7 +609,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
               _buildStatCard(
                 icon: Icons.payments,
                 title: '오늘 수납',
-                value: '₩450K',
+                value: '450,000원',
                 color: Colors.purple,
                 subtitle: '5건 처리',
               ),
