@@ -155,28 +155,47 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
             ),
           ),
 
-          // 메뉴
+          // 메뉴 - 3대 영역 구조
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 16),
               children: [
+                // ========================================
+                // ① 오늘 할 일 (Daily Ops) - 가장 위
+                // ========================================
+                _buildSectionHeader('📅 오늘 할 일', Colors.orange),
                 _buildSidebarMenuItem(
-                  icon: Icons.dashboard,
+                  icon: Icons.home,
                   title: '대시보드',
                   value: 'dashboard',
                 ),
-                const Divider(height: 24),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(24, 8, 24, 8),
-                  child: Text(
-                    '운영 관리',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
+                _buildSidebarMenuItem(
+                  icon: Icons.today,
+                  title: '오늘 일정',
+                  value: 'today_schedule',
                 ),
+                _buildSidebarMenuItem(
+                  icon: Icons.check_circle_outline,
+                  title: '출석/수업 처리',
+                  value: 'attendance',
+                ),
+                _buildSidebarMenuItem(
+                  icon: Icons.edit_note,
+                  title: '오늘 세션 기록',
+                  value: 'today_session',
+                ),
+                _buildSidebarMenuItem(
+                  icon: Icons.notifications,
+                  title: '오늘 알림',
+                  value: 'today_notice',
+                ),
+                
+                const Divider(height: 24),
+                
+                // ========================================
+                // ② 센터 운영 (Center Ops)
+                // ========================================
+                _buildSectionHeader('🏢 센터 운영', Colors.blue),
                 _buildSidebarMenuItem(
                   icon: Icons.calendar_today,
                   title: '일정 관리',
@@ -189,7 +208,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                 ),
                 _buildSidebarMenuItem(
                   icon: Icons.confirmation_number,
-                  title: '보강권 조회',
+                  title: '보강·이월 관리',
                   value: 'makeup',
                 ),
                 _buildSidebarMenuItem(
@@ -199,7 +218,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                 ),
                 _buildSidebarMenuItem(
                   icon: Icons.payments,
-                  title: '수납 관리',
+                  title: '수납·정산',
                   value: 'payment',
                 ),
                 _buildSidebarMenuItem(
@@ -212,18 +231,13 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                   title: '자료실',
                   value: 'files',
                 ),
+                
                 const Divider(height: 24),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(24, 8, 24, 8),
-                  child: Text(
-                    '임상 기능',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ),
+                
+                // ========================================
+                // ③ 임상 관리 (Clinical)
+                // ========================================
+                _buildSectionHeader('🩺 임상 관리', Colors.green),
                 _buildSidebarMenuItem(
                   icon: Icons.person_add,
                   title: '환자 등록',
@@ -235,26 +249,37 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                   value: 'assessment',
                 ),
                 _buildSidebarMenuItem(
+                  icon: Icons.flag,
+                  title: '목표 관리 (SMART)',
+                  value: 'goals',
+                ),
+                _buildSidebarMenuItem(
+                  icon: Icons.lightbulb_outline,
+                  title: '콘텐츠 추천',
+                  value: 'content',
+                ),
+                _buildSidebarMenuItem(
                   icon: Icons.edit_note,
                   title: '세션 기록',
                   value: 'session',
-                ),
-                _buildSidebarMenuItem(
-                  icon: Icons.flag,
-                  title: '목표 관리',
-                  value: 'goals',
                 ),
                 _buildSidebarMenuItem(
                   icon: Icons.trending_up,
                   title: '성과 추이',
                   value: 'progress',
                 ),
+                
                 const Divider(height: 24),
-                _buildSidebarMenuItem(
-                  icon: Icons.settings,
-                  title: '환경설정',
-                  value: 'settings',
-                ),
+                
+                // ========================================
+                // 환경설정 (센터장 전용)
+                // ========================================
+                if (user.role == 'ADMIN')
+                  _buildSidebarMenuItem(
+                    icon: Icons.settings,
+                    title: '환경설정',
+                    value: 'settings',
+                  ),
               ],
             ),
           ),
@@ -277,6 +302,34 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                 appState.logout();
                 Navigator.of(context).pushReplacementNamed('/login');
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 섹션 헤더 위젯
+  Widget _buildSectionHeader(String title, Color color) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 16,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
         ],
@@ -395,17 +448,25 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
   String _getMenuTitle() {
     switch (_selectedMenu) {
       case 'dashboard': return '대시보드';
+      // 오늘 할 일
+      case 'today_schedule': return '오늘 일정';
+      case 'attendance': return '출석/수업 처리';
+      case 'today_session': return '오늘 세션 기록';
+      case 'today_notice': return '오늘 알림';
+      // 센터 운영
       case 'schedule': return '일정 관리';
       case 'patients': return '이용자 관리';
-      case 'makeup': return '보강권 조회';
+      case 'makeup': return '보강·이월 관리';
       case 'voucher': return '바우처 관리';
-      case 'payment': return '수납 관리';
+      case 'payment': return '수납·정산';
       case 'notice': return '공지사항';
       case 'files': return '자료실';
+      // 임상 관리
       case 'register': return '환자 등록';
       case 'assessment': return '평가 입력';
+      case 'goals': return '목표 관리 (SMART)';
+      case 'content': return '콘텐츠 추천';
       case 'session': return '세션 기록';
-      case 'goals': return '목표 관리';
       case 'progress': return '성과 추이';
       case 'settings': return '환경설정';
       default: return '대시보드';
@@ -414,12 +475,25 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
 
   String _getMenuSubtitle() {
     switch (_selectedMenu) {
-      case 'dashboard': return '오늘의 주요 정보를 확인하세요';
+      case 'dashboard': return '오늘의 주요 정보를 한눈에 확인하세요';
+      // 오늘 할 일
+      case 'today_schedule': return '오늘 예정된 수업과 일정을 확인하세요';
+      case 'attendance': return '오늘 출석과 수업 처리를 진행하세요';
+      case 'today_session': return '오늘 진행한 세션을 기록하세요';
+      case 'today_notice': return '오늘의 알림과 공지를 확인하세요';
+      // 센터 운영
       case 'schedule': return '예약 및 출석 현황을 관리하세요';
-      case 'patients': return '환자 목록을 확인하고 관리하세요';
-      case 'makeup': return '보강권 발급 및 사용 내역을 확인하세요';
-      case 'voucher': return '바우처 현황을 관리하세요';
+      case 'patients': return '이용자 목록을 확인하고 관리하세요';
+      case 'makeup': return '보강권과 이월 현황을 관리하세요';
+      case 'voucher': return '바우처 프로그램을 관리하세요';
       case 'payment': return '수납 및 정산 내역을 확인하세요';
+      // 임상 관리
+      case 'register': return '새로운 환자를 등록하세요';
+      case 'assessment': return '환자의 평가를 입력하고 관리하세요';
+      case 'goals': return 'SMART 목표를 설정하고 관리하세요';
+      case 'content': return '환자에게 맞는 콘텐츠를 추천하세요';
+      case 'session': return '세션 기록을 작성하세요';
+      case 'progress': return '환자의 성과 추이를 확인하세요';
       default: return '';
     }
   }
@@ -470,6 +544,30 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
       case 'settings':
         content = const AdminSettingsScreen();
         break;
+      
+      // ========================================
+      // 오늘 할 일 (Daily Ops) 화면들
+      // ========================================
+      case 'today_schedule':
+        content = _buildTodaySchedule(context, user);
+        break;
+      case 'attendance':
+        content = _buildAttendanceScreen(context, user);
+        break;
+      case 'today_session':
+        content = _buildTodaySessionScreen(context, user);
+        break;
+      case 'today_notice':
+        content = _buildTodayNoticeScreen(context, user);
+        break;
+      
+      // ========================================
+      // 임상 관리 추가 화면
+      // ========================================
+      case 'content':
+        content = _buildContentRecommendation(context, user);
+        break;
+        
       default:
         content = _buildDashboardContent(context, user);
     }
@@ -502,6 +600,222 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========================================
+  // 오늘 할 일 (Daily Ops) 화면들
+  // ========================================
+  
+  /// 오늘 일정 화면 (일정 관리의 오늘 날짜로 필터링)
+  Widget _buildTodaySchedule(BuildContext context, dynamic user) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.1),
+            border: Border(
+              bottom: BorderSide(color: Colors.orange.withValues(alpha: 0.3)),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.today, color: Colors.orange),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '오늘의 일정',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '${DateTime.now().year}년 ${DateTime.now().month}월 ${DateTime.now().day}일',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const Expanded(
+          child: CalendarScheduleScreen(),
+        ),
+      ],
+    );
+  }
+
+  /// 출석/수업 처리 화면
+  Widget _buildAttendanceScreen(BuildContext context, dynamic user) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.check_circle_outline,
+            size: 100,
+            color: Colors.orange[400],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            '출석/수업 처리',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '오늘 일정에서 출석 처리를 진행하세요',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              setState(() {
+                _selectedMenu = 'today_schedule';
+              });
+            },
+            icon: const Icon(Icons.arrow_forward),
+            label: const Text('오늘 일정으로 이동'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 오늘 세션 기록 화면
+  Widget _buildTodaySessionScreen(BuildContext context, dynamic user) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.1),
+            border: Border(
+              bottom: BorderSide(color: Colors.orange.withValues(alpha: 0.3)),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.edit_note, color: Colors.orange),
+              const SizedBox(width: 12),
+              const Text(
+                '오늘 세션 기록',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Expanded(
+          child: ClinicalFeaturePatientSelector(featureType: 'session'),
+        ),
+      ],
+    );
+  }
+
+  /// 오늘 알림 화면
+  Widget _buildTodayNoticeScreen(BuildContext context, dynamic user) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.1),
+            border: Border(
+              bottom: BorderSide(color: Colors.orange.withValues(alpha: 0.3)),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.notifications, color: Colors.orange),
+              const SizedBox(width: 12),
+              const Text(
+                '오늘의 알림',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Expanded(
+          child: NoticeListScreen(),
+        ),
+      ],
+    );
+  }
+
+  // ========================================
+  // 임상 관리 추가 화면
+  // ========================================
+  
+  /// 콘텐츠 추천 화면
+  Widget _buildContentRecommendation(BuildContext context, dynamic user) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.lightbulb_outline,
+            size: 100,
+            color: Colors.green[400],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            '콘텐츠 추천',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '환자의 목표와 평가 결과를 기반으로\n맞춤 콘텐츠를 추천합니다',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              setState(() {
+                _selectedMenu = 'goals';
+              });
+            },
+            icon: const Icon(Icons.flag),
+            label: const Text('목표 관리로 이동'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             ),
           ),
         ],
