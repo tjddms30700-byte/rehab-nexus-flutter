@@ -163,6 +163,12 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
                       const SizedBox(height: 24),
                     ],
                     
+                    // 환자 연결 확인
+                    if (_myPatients.isEmpty) ...[
+                      _buildNoPatientCard(),
+                      const SizedBox(height: 24),
+                    ],
+                    
                     // 핵심 카드 3개
                     _buildCoreCardsSection(),
                     const SizedBox(height: 24),
@@ -383,11 +389,21 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
     int badgeCount = 0,
     required VoidCallback onTap,
   }) {
+    // 환자 연결 확인 - 없으면 비활성화
+    final bool hasPatient = _myPatients.isNotEmpty;
+    
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: onTap,
+        onTap: hasPatient ? onTap : () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('연결된 아동 정보가 없습니다. 센터에 문의해 주세요.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        },
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -401,12 +417,14 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
               ),
             ],
           ),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
+          child: Opacity(
+            opacity: hasPatient ? 1.0 : 0.5,
+            child: Row(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: iconColor.withValues(alpha: 0.1),
@@ -464,6 +482,58 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
             ],
           ),
         ),
+      ),
+    ),
+    );
+  }
+
+  Widget _buildNoPatientCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.info_outline, size: 48, color: Colors.orange.shade700),
+          const SizedBox(height: 16),
+          const Text(
+            '연결된 아동 정보가 없습니다',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A1A1A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '센터에 문의해 주세요',
+            style: TextStyle(
+              fontSize: 14,
+              color: Color(0xFF666666),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              // 문의하기 기능 (일반 문의)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('센터 연락처: 1234-5678'),
+                ),
+              );
+            },
+            icon: const Icon(Icons.phone),
+            label: const Text('센터에 문의하기'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+          ),
+        ],
       ),
     );
   }

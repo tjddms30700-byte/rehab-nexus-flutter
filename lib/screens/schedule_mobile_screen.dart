@@ -323,11 +323,13 @@ class _ScheduleMobileScreenState extends State<ScheduleMobileScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: InkWell(
+        onTap: () => _showAppointmentActionSheet(appointment),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             // 시간 + 상태
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -411,17 +413,184 @@ class _ScheduleMobileScreenState extends State<ScheduleMobileScreen> {
               ),
             ],
             
-            // 액션 버튼
-            if (actionButtons.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: actionButtons,
-              ),
-            ],
+            // 액션 버튼 제거 (Bottom Sheet에서 처리)
           ],
         ),
       ),
+      ),
+    );
+  }
+  
+  void _showAppointmentActionSheet(Appointment appointment) {
+    final now = DateTime.now();
+    final isPast = appointment.appointmentDate.isBefore(now);
+    
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 환자 정보
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Colors.blue.shade100,
+                    child: Text(
+                      appointment.patientName[0],
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          appointment.patientName,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '${appointment.isMakeup ? '보강 · ' : ''}${appointment.timeSlot}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 32),
+              
+              // 출석 처리
+              if (appointment.status != AppointmentStatus.completed &&
+                  appointment.status != AppointmentStatus.cancelled) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _markAttendance(appointment, true);
+                    },
+                    icon: const Icon(Icons.check_circle),
+                    label: const Text('출석 처리'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              
+              // 세션 기록
+              if (appointment.status == AppointmentStatus.completed) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('세션 기록 기능 개발 예정')),
+                      );
+                    },
+                    icon: const Icon(Icons.edit_note),
+                    label: const Text('세션 기록 작성'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              
+              // 보호자 메모
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('보호자 메모 기능 개발 예정')),
+                    );
+                  },
+                  icon: const Icon(Icons.message),
+                  label: const Text('보호자 메모'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    textStyle: const TextStyle(fontSize: 16),
+                  ),
+                ),
+              ),
+              
+              // 결석 처리
+              if (appointment.status != AppointmentStatus.completed &&
+                  appointment.status != AppointmentStatus.cancelled &&
+                  isPast) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _markAttendance(appointment, false);
+                    },
+                    icon: const Icon(Icons.cancel),
+                    label: const Text('결석 처리'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+              ],
+              
+              const SizedBox(height: 12),
+              // 잔여 회차 정보
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('잔여 회차'),
+                    Text(
+                      '3회', // TODO: 실제 데이터
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
   

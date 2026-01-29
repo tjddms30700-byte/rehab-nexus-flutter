@@ -13,6 +13,7 @@ import 'file_library_screen.dart';
 import 'makeup_ticket_list_screen.dart';
 import 'voucher_list_screen.dart';
 import 'payment_list_screen.dart';
+import 'reschedule_management_screen.dart';
 // 임상 기능 화면 추가
 import 'clinical_feature_patient_selector.dart';
 import 'admin_settings_screen.dart';
@@ -1212,18 +1213,10 @@ Widget _buildOperationsSection(BuildContext context, AppUser user) {
           _buildFeatureCard(
             context,
             icon: Icons.confirmation_number,
-            title: '보강권 조회',
-            subtitle: '보강권 관리',
+            title: '보강·이월·이용권',
+            subtitle: '통합 관리',
             color: Colors.orange,
-            screen: const MakeupTicketListScreen(),
-          ),
-          _buildFeatureCard(
-            context,
-            icon: Icons.card_giftcard,
-            title: '바우처 관리',
-            subtitle: '바우처 현황',
-            color: Colors.purple,
-            screen: const VoucherListScreen(),
+            screen: const RescheduleManagementScreen(),
           ),
           _buildFeatureCard(
             context,
