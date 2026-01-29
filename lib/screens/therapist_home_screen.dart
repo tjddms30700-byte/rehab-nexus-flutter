@@ -104,18 +104,49 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
     final appState = context.watch<AppState>();
     final user = appState.currentUser!;
 
-    return Scaffold(
-      body: Row(
-        children: [
-          // 좌측 사이드바
-          _buildSidebar(context, user, appState),
-          
-          // 우측 메인 컨텐츠
-          Expanded(
-            child: _buildMainContent(context, user),
-          ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        
+        // ✅ 반응형 네비게이션 규칙
+        // >= 1024px: Sidebar (좌측 고정)
+        // 768 ~ 1023px: NavigationRail (아이콘+텍스트 축약)
+        // < 768px: Drawer + BottomNav
+        
+        if (screenWidth >= 1024) {
+          // Desktop: Full Sidebar
+          return Scaffold(
+            body: Row(
+              children: [
+                _buildSidebar(context, user, appState),
+                Expanded(child: _buildMainContent(context, user)),
+              ],
+            ),
+          );
+        } else if (screenWidth >= 768) {
+          // Tablet: NavigationRail
+          return Scaffold(
+            body: Row(
+              children: [
+                _buildNavigationRail(context, user, appState),
+                Expanded(child: _buildMainContent(context, user)),
+              ],
+            ),
+          );
+        } else {
+          // Mobile: Drawer
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('AQU LAB Care'),
+              backgroundColor: Colors.blue[700],
+            ),
+            drawer: Drawer(
+              child: _buildDrawerContent(context, user, appState),
+            ),
+            body: _buildMainContent(context, user),
+          );
+        }
+      },
     );
   }
 
@@ -339,6 +370,153 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
     );
   }
 
+  /// NavigationRail (태블릿용)
+  Widget _buildNavigationRail(BuildContext context, dynamic user, AppState appState) {
+    final menuItems = _getMenuItems(user);
+    
+    return NavigationRail(
+      selectedIndex: menuItems.indexWhere((item) => item['value'] == _selectedMenu),
+      onDestinationSelected: (int index) {
+        setState(() {
+          _selectedMenu = menuItems[index]['value'] as String;
+        });
+      },
+      labelType: NavigationRailLabelType.selected,
+      backgroundColor: Colors.white,
+      destinations: menuItems.map((item) {
+        return NavigationRailDestination(
+          icon: Icon(item['icon'] as IconData),
+          label: Text(item['title'] as String),
+        );
+      }).toList(),
+      trailing: Expanded(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: IconButton(
+              icon: const Icon(Icons.logout, color: Colors.red),
+              onPressed: () {
+                appState.logout();
+                Navigator.of(context).pushReplacementNamed('/login');
+              },
+              tooltip: '로그아웃',
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Drawer 컨텐츠 (모바일용)
+  Widget _buildDrawerContent(BuildContext context, dynamic user, AppState appState) {
+    return Column(
+      children: [
+        // 헤더
+        DrawerHeader(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue[700]!, Colors.blue[500]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 40,
+                backgroundColor: Colors.white,
+                child: Text(
+                  user.name[0],
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[700],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                user.name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                _getRoleTitle(user.role),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.white70,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // 메뉴 리스트
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: _getMenuItems(user).map((item) {
+              return ListTile(
+                leading: Icon(item['icon'] as IconData),
+                title: Text(item['title'] as String),
+                selected: _selectedMenu == item['value'],
+                onTap: () {
+                  setState(() {
+                    _selectedMenu = item['value'] as String;
+                  });
+                  Navigator.pop(context); // Close drawer
+                },
+              );
+            }).toList(),
+          ),
+        ),
+        
+        // 로그아웃
+        Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: Colors.grey[300]!)),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('로그아웃', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              appState.logout();
+              Navigator.of(context).pushReplacementNamed('/login');
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 메뉴 아이템 리스트 생성
+  List<Map<String, dynamic>> _getMenuItems(dynamic user) {
+    return [
+      {'icon': Icons.dashboard, 'title': '대시보드', 'value': 'dashboard'},
+      {'icon': Icons.calendar_today, 'title': '일정 관리', 'value': 'schedule'},
+      {'icon': Icons.people, 'title': '이용자 관리', 'value': 'patients'},
+      {'icon': Icons.confirmation_number, 'title': '보강·이월·이용권', 'value': 'makeup'},
+      {'icon': Icons.payments, 'title': '수납 관리', 'value': 'payment'},
+      {'icon': Icons.campaign, 'title': '공지사항', 'value': 'notice'},
+      {'icon': Icons.folder, 'title': '자료실', 'value': 'files'},
+      {'icon': Icons.person_add, 'title': '환자 등록', 'value': 'register'},
+      {'icon': Icons.assessment, 'title': '평가 입력', 'value': 'assessment'},
+      {'icon': Icons.flag, 'title': '목표 관리', 'value': 'goals'},
+      {'icon': Icons.lightbulb_outline, 'title': '콘텐츠 추천', 'value': 'content'},
+      {'icon': Icons.edit_note, 'title': '세션 기록', 'value': 'session'},
+      {'icon': Icons.trending_up, 'title': '성과 추이', 'value': 'progress'},
+      if (user.role == 'ADMIN') ...[
+        {'icon': Icons.mail, 'title': '초대 관리', 'value': 'invites'},
+        {'icon': Icons.settings, 'title': '환경설정', 'value': 'settings'},
+      ],
+    ];
+  }
+
   /// 섹션 헤더 위젯
   Widget _buildSectionHeader(String title, Color color) {
     return Padding(
@@ -547,7 +725,15 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
         );
         break;
       case 'schedule':
-        content = const CalendarScheduleScreen();
+        // ✅ 모바일/웹 분기 처리
+        content = LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 768;
+            return isMobile
+                ? ScheduleMobileScreen(user: user)
+                : const CalendarScheduleScreen();
+          },
+        );
         break;
       case 'patients':
         content = const PatientManagementScreen();
@@ -693,8 +879,15 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
             ],
           ),
         ),
-        const Expanded(
-          child: CalendarScheduleScreen(),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 768;
+              return isMobile
+                  ? ScheduleMobileScreen(user: user)
+                  : const CalendarScheduleScreen();
+            },
+          ),
         ),
       ],
     );

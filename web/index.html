@@ -19,6 +19,9 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="AQU LAB Care - 재활 서비스 표준화 플랫폼">
+  
+  <!-- ✅ CRITICAL: Viewport meta for mobile responsiveness -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -31,6 +34,39 @@
 
   <title>aqualabcare</title>
   <link rel="manifest" href="manifest.json">
+  
+  <!-- ✅ CRITICAL: Force 100% width/height for Flutter container -->
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #ffffff;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
+    
+    /* Flutter target container */
+    #flutter-target,
+    flt-glass-pane {
+      width: 100vw !important;
+      height: 100vh !important;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+    }
+    
+    /* Prevent any wrapper from limiting width */
+    body > * {
+      max-width: none !important;
+      width: 100% !important;
+    }
+  </style>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
