@@ -6,6 +6,7 @@ import 'assessment_input_screen.dart';
 import 'session_record_screen.dart';
 import 'goal_list_screen.dart';
 import 'progress_tracking_screen.dart';
+import 'content_recommendation_screen.dart';
 
 /// 임상 기능 환자 선택 화면
 class ClinicalFeaturePatientSelector extends StatefulWidget {
@@ -75,6 +76,8 @@ class _ClinicalFeaturePatientSelectorState extends State<ClinicalFeaturePatientS
         return '목표 관리';
       case 'progress':
         return '성과 추이';
+      case 'content':
+        return '콘텐츠 추천';
       default:
         return '환자 선택';
     }
@@ -94,6 +97,9 @@ class _ClinicalFeaturePatientSelectorState extends State<ClinicalFeaturePatientS
         break;
       case 'progress':
         screen = ProgressTrackingScreen(patient: patient);
+        break;
+      case 'content':
+        screen = ContentRecommendationScreen(patient: patient);
         break;
       default:
         return;

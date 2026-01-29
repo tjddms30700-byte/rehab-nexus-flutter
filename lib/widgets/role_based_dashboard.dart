@@ -59,8 +59,13 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           .where('appointment_date',
               isLessThan: Timestamp.fromDate(endOfDay));
 
-      // 치료사는 자신의 일정만
-      if (widget.user.role == UserRole.therapist) {
+      // ✅ 치료사 전용 역할이면 자신의 일정만 (owner/admin은 모든 일정 표시)
+      final isTherapistOnly = widget.user.hasRole(UserRole.therapist) && 
+                              !widget.user.hasAnyRole([UserRole.superAdmin, UserRole.centerAdmin]) &&
+                              widget.user.roles['owner'] != true &&
+                              widget.user.roles['admin'] != true;
+      
+      if (isTherapistOnly) {
         appointmentsQuery =
             appointmentsQuery.where('therapist_id', isEqualTo: widget.user.id);
       }
@@ -90,13 +95,15 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
       // 고정수업 수 조회
       await _loadActiveFixedSchedules();
       
-      // 세션 기록 미완 조회 (치료사만)
-      if (widget.user.role == UserRole.therapist) {
+      // 세션 기록 미완 조회 (치료사 역할 있으면)
+      if (widget.user.hasRole(UserRole.therapist) || widget.user.roles['therapist'] == true) {
         await _loadUnfinishedSessions();
       }
       
-      // 보강 요청 조회 (센터장/관리자만)
-      if (widget.user.role == UserRole.centerAdmin || widget.user.role == UserRole.superAdmin) {
+      // 보강 요청 조회 (센터장/관리자 역할 있으면)
+      if (widget.user.hasAnyRole([UserRole.centerAdmin, UserRole.superAdmin]) ||
+          widget.user.roles['owner'] == true ||
+          widget.user.roles['admin'] == true) {
         await _loadMakeupRequests();
       }
 
@@ -616,6 +623,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   }
 
   Widget _buildKPICards() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1024;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -631,10 +641,10 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
+          crossAxisCount: isDesktop ? 4 : 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.5,
+          childAspectRatio: isDesktop ? 3.0 : 1.5, // 웹: 가로로 넓게, 모바일: 정사각형
           children: [
             _buildKPICard(
               icon: Icons.calendar_today,

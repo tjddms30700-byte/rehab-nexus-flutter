@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'patient_registration_screen.dart';
 
 /// 이용자 관리 화면 (파일 업로드, 수정, 삭제, 프로그램 현황 포함)
 class PatientManagementScreen extends StatefulWidget {
@@ -128,7 +129,12 @@ class _PatientManagementScreenState extends State<PatientManagementScreen> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () async {
-              final result = await Navigator.pushNamed(context, '/register');
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PatientRegistrationScreen(),
+                ),
+              );
               if (result == true) {
                 _loadPatients();
               }

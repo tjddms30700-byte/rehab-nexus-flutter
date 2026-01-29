@@ -801,7 +801,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
       // 임상 관리 추가 화면
       // ========================================
       case 'content':
-        content = _buildContentRecommendation(context, user);
+        content = const ClinicalFeaturePatientSelector(featureType: 'content');
         break;
         
       default:

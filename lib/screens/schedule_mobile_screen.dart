@@ -41,8 +41,13 @@ class _ScheduleMobileScreenState extends State<ScheduleMobileScreen> {
           .where('appointment_date', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
           .where('appointment_date', isLessThan: Timestamp.fromDate(endOfDay));
       
-      // 치료사는 자신의 예약만
-      if (widget.user.role == UserRole.therapist) {
+      // ✅ 치료사 전용 역할이면 자신의 예약만 (owner/admin은 모든 예약 표시)
+      final isTherapistOnly = widget.user.hasRole(UserRole.therapist) && 
+                              !widget.user.hasAnyRole([UserRole.superAdmin, UserRole.centerAdmin]) &&
+                              widget.user.roles['owner'] != true &&
+                              widget.user.roles['admin'] != true;
+      
+      if (isTherapistOnly) {
         query = query.where('therapist_id', isEqualTo: widget.user.id);
       }
       
@@ -103,15 +108,17 @@ class _ScheduleMobileScreenState extends State<ScheduleMobileScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildDateSelector(),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildTimelineList(),
-          ),
-        ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildDateSelector(),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildTimelineList(),
+            ),
+          ],
+        ),
       ),
     );
   }
