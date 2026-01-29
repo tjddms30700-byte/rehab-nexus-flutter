@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../providers/app_state.dart';
 import '../models/appointment.dart';
 import '../models/patient.dart';
 import '../constants/enums.dart';
@@ -20,7 +18,6 @@ class CalendarScheduleScreen extends StatefulWidget {
 
 class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
   final AppointmentService _appointmentService = AppointmentService();
-  final PatientService _patientService = PatientService();
 
   // 선택된 날짜
   DateTime _selectedDate = DateTime.now();
@@ -46,6 +43,13 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
 
   // 로딩 상태
   bool _isLoading = true;
+
+  // 우측 패널 상태
+  bool _isRightPanelOpen = false;
+  Appointment? _selectedAppointment;
+  String? _selectedTherapistId;
+  String? _selectedTherapistName;
+  int? _selectedHour;
 
   @override
   void initState() {
@@ -153,7 +157,6 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
   Future<void> _loadAppointments() async {
     try {
       final startOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-      final endOfDay = startOfDay.add(const Duration(days: 1));
 
       Map<String, List<Appointment>> appointmentsByTherapist = {};
 
@@ -210,8 +213,34 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
     _loadAppointments();
   }
 
-  /// 시간 슬롯 클릭 시 - 예약 생성 다이얼로그
-  Future<void> _onTimeSlotTapped(String therapistId, String therapistName, int hour) async {
+  /// 시간 슬롯 클릭 시 - 우측 패널 열기
+  void _onTimeSlotTapped(String therapistId, String therapistName, int hour, Appointment? appointment) {
+    setState(() {
+      _isRightPanelOpen = true;
+      _selectedAppointment = appointment;
+      _selectedTherapistId = therapistId;
+      _selectedTherapistName = therapistName;
+      _selectedHour = hour;
+    });
+  }
+
+  /// 우측 패널 닫기
+  void _closeRightPanel() {
+    setState(() {
+      _isRightPanelOpen = false;
+      _selectedAppointment = null;
+      _selectedTherapistId = null;
+      _selectedTherapistName = null;
+      _selectedHour = null;
+    });
+  }
+
+  /// 예약 생성 다이얼로그 열기
+  Future<void> _showCreateAppointmentDialog() async {
+    if (_selectedTherapistId == null || _selectedTherapistName == null || _selectedHour == null) {
+      return;
+    }
+
     // 휴무일 체크
     if (_isOffDay(_selectedDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -223,13 +252,13 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
       return;
     }
     
-    final timeSlot = '${hour.toString().padLeft(2, '0')}:00-${(hour + 1).toString().padLeft(2, '0')}:00';
+    final timeSlot = '${_selectedHour!.toString().padLeft(2, '0')}:00-${(_selectedHour! + 1).toString().padLeft(2, '0')}:00';
 
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => CreateAppointmentDialog(
-        therapistId: therapistId,
-        therapistName: therapistName,
+        therapistId: _selectedTherapistId!,
+        therapistName: _selectedTherapistName!,
         selectedDate: _selectedDate,
         initialTimeSlot: timeSlot,
         patients: _patients,
@@ -239,6 +268,7 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
     // 예약 생성 성공 시 데이터 새로고침
     if (result == true) {
       _loadAppointments();
+      _closeRightPanel();
     }
   }
 
@@ -283,11 +313,22 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
             child: _buildMiniCalendar(),
           ),
 
-          // 우측: 일/주/월에 따라 다른 화면
+          // 중앙: 일/주/월에 따라 다른 화면
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _buildViewByMode(),
+          ),
+
+          // 우측: 작업 패널 (슬라이드 방식)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: _isRightPanelOpen ? 400 : 0,
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: Colors.grey.shade300)),
+              color: Colors.white,
+            ),
+            child: _isRightPanelOpen ? _buildRightPanel() : null,
           ),
         ],
       ),
@@ -515,14 +556,19 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
 
               return DataCell(
                 InkWell(
-                  onTap: () => _onTimeSlotTapped(therapistId, therapist['name']!, hour),
+                  onTap: () => _onTimeSlotTapped(
+                    therapistId, 
+                    therapist['name']!, 
+                    hour,
+                    appointment.id.isNotEmpty ? appointment : null,
+                  ),
                   child: Container(
                     width: 200,
                     height: 80,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: appointment.id.isNotEmpty
-                          ? _getStatusColor(appointment.status)
+                          ? appointment.slotColor
                           : Colors.grey.shade50,
                       border: Border.all(color: Colors.grey.shade300),
                     ),
@@ -541,7 +587,7 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _getStatusText(appointment.status),
+                                appointment.slotStatusText,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey.shade700,
@@ -798,6 +844,421 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
         ),
       ],
     );
+  }
+
+  /// 우측 작업 패널
+  Widget _buildRightPanel() {
+    return Container(
+      width: 400,
+      color: Colors.white,
+      child: Column(
+        children: [
+          // 패널 헤더
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '수업 정보',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: _closeRightPanel,
+                ),
+              ],
+            ),
+          ),
+
+          // 패널 내용
+          Expanded(
+            child: _selectedAppointment != null
+                ? _buildAppointmentDetails()
+                : _buildEmptySlot(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 예약 상세 정보
+  Widget _buildAppointmentDetails() {
+    final apt = _selectedAppointment!;
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 슬롯 상태 배지
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: apt.slotColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              apt.slotStatusText,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // 환자 정보
+          _buildInfoSection(
+            title: '환자 정보',
+            items: [
+              _buildInfoRow(Icons.person, '이름', apt.patientName),
+              _buildInfoRow(Icons.access_time, '시간', apt.timeSlot),
+              _buildInfoRow(Icons.person_outline, '담당', apt.therapistName),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 출석 정보
+          if (apt.attended || apt.attendedAt != null) ...[
+            _buildInfoSection(
+              title: '출석 정보',
+              items: [
+                _buildInfoRow(
+                  Icons.check_circle,
+                  '출석 여부',
+                  apt.attended ? '출석 완료' : '미출석',
+                ),
+                if (apt.attendedAt != null)
+                  _buildInfoRow(
+                    Icons.calendar_today,
+                    '출석 시각',
+                    '${apt.attendedAt!.month}/${apt.attendedAt!.day} ${apt.attendedAt!.hour}:${apt.attendedAt!.minute.toString().padLeft(2, '0')}',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 세션 정보
+          if (apt.sessionRecorded || apt.sessionRecordedAt != null) ...[
+            _buildInfoSection(
+              title: '세션 기록',
+              items: [
+                _buildInfoRow(
+                  Icons.description,
+                  '기록 여부',
+                  apt.sessionRecorded ? '기록 완료' : '미기록',
+                ),
+                if (apt.sessionRecordedAt != null)
+                  _buildInfoRow(
+                    Icons.calendar_today,
+                    '기록 시각',
+                    '${apt.sessionRecordedAt!.month}/${apt.sessionRecordedAt!.day} ${apt.sessionRecordedAt!.hour}:${apt.sessionRecordedAt!.minute.toString().padLeft(2, '0')}',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 보강 정보
+          if (apt.isMakeup && apt.makeupTicketId != null) ...[
+            _buildInfoSection(
+              title: '보강 정보',
+              items: [
+                _buildInfoRow(Icons.replay, '보강 수업', '보강권 사용'),
+                _buildInfoRow(Icons.confirmation_number, '보강권 ID', apt.makeupTicketId!),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 메모
+          if (apt.notes != null && apt.notes!.isNotEmpty) ...[
+            _buildInfoSection(
+              title: '메모',
+              items: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(apt.notes!),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          const Divider(),
+          const SizedBox(height: 16),
+
+          // 액션 버튼들
+          _buildActionButtons(apt),
+        ],
+      ),
+    );
+  }
+
+  /// 빈 슬롯 정보
+  Widget _buildEmptySlot() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 슬롯 상태 배지
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text(
+              '빈 슬롯',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // 슬롯 정보
+          _buildInfoSection(
+            title: '슬롯 정보',
+            items: [
+              _buildInfoRow(Icons.person_outline, '담당', _selectedTherapistName ?? ''),
+              _buildInfoRow(
+                Icons.access_time,
+                '시간',
+                '${_selectedHour!.toString().padLeft(2, '0')}:00-${(_selectedHour! + 1).toString().padLeft(2, '0')}:00',
+              ),
+              _buildInfoRow(
+                Icons.calendar_today,
+                '날짜',
+                '${_selectedDate.year}년 ${_selectedDate.month}월 ${_selectedDate.day}일',
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // 예약 생성 버튼
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: _showCreateAppointmentDialog,
+              icon: const Icon(Icons.add),
+              label: const Text(
+                '예약 생성',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 정보 섹션 빌더
+  Widget _buildInfoSection({required String title, required List<Widget> items}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...items,
+      ],
+    );
+  }
+
+  /// 정보 행 빌더
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.grey.shade600),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 액션 버튼들
+  Widget _buildActionButtons(Appointment apt) {
+    return Column(
+      children: [
+        // 출석 처리
+        if (!apt.attended) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: () => _markAttendance(apt),
+              icon: const Icon(Icons.check_circle),
+              label: const Text('출석 처리'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // 세션 기록
+        if (apt.attended && !apt.sessionRecorded) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: () => _goToSessionRecord(apt),
+              icon: const Icon(Icons.description),
+              label: const Text('세션 기록'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // 예약 취소
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: OutlinedButton.icon(
+            onPressed: () => _cancelAppointment(apt),
+            icon: const Icon(Icons.cancel),
+            label: const Text('예약 취소'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 출석 처리
+  Future<void> _markAttendance(Appointment apt) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('appointments')
+          .doc(apt.id)
+          .update({
+        'attended': true,
+        'attended_at': FieldValue.serverTimestamp(),
+        'status': 'CONFIRMED',
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('출석 처리되었습니다')),
+      );
+
+      _loadAppointments();
+      _closeRightPanel();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('출석 처리 실패: $e')),
+      );
+    }
+  }
+
+  /// 세션 기록 화면으로 이동
+  void _goToSessionRecord(Appointment apt) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('세션 기록 화면으로 이동합니다 (구현 예정)')),
+    );
+    // TODO: Navigator.push to session record screen
+  }
+
+  /// 예약 취소
+  Future<void> _cancelAppointment(Appointment apt) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('예약 취소'),
+        content: const Text('정말 이 예약을 취소하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('아니오'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('예', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('appointments')
+            .doc(apt.id)
+            .update({
+          'status': 'CANCELLED',
+          'updated_at': FieldValue.serverTimestamp(),
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('예약이 취소되었습니다')),
+        );
+
+        _loadAppointments();
+        _closeRightPanel();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('예약 취소 실패: $e')),
+        );
+      }
+    }
   }
 }
 
