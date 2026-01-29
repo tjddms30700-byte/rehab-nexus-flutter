@@ -15,6 +15,8 @@ import 'payment_list_screen.dart';
 import 'clinical_feature_patient_selector.dart';
 import 'admin_settings_screen.dart';
 import 'invite_management_screen.dart';
+// 역할별 대시보드
+import '../widgets/role_based_dashboard.dart';
 
 /// 치료사 홈 화면 - 반응형 웹/모바일
 class TherapistHomeScreen extends StatelessWidget {
@@ -514,7 +516,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
     
     switch (_selectedMenu) {
       case 'dashboard':
-        content = _buildDashboardContent(context, user);
+        content = RoleBasedDashboard(user: user);
         break;
       case 'schedule':
         content = const CalendarScheduleScreen();

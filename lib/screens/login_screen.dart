@@ -6,6 +6,8 @@ import '../constants/user_roles.dart';
 import '../services/auth_service.dart';
 import 'therapist_home_screen.dart';
 import 'guardian_home_screen.dart';
+import 'guardian_tutorial_screen.dart';
+import 'invite_code_screen.dart';
 
 /// 로그인 화면 - 의료/센터 전용 UX
 class LoginScreen extends StatelessWidget {
@@ -106,7 +108,7 @@ class _LoginScreenMobileState extends State<_LoginScreenMobile> {
             ],
           ),
           child: const Icon(
-            Icons.water_drop,
+            Icons.waves,
             size: 40,
             color: Colors.white,
           ),
@@ -414,9 +416,22 @@ class _LoginScreenMobileState extends State<_LoginScreenMobile> {
 
       // 역할별 홈 화면으로 이동
       if (user.role == UserRole.guardian) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const GuardianHomeScreen()),
-        );
+        // 보호자의 경우 첫 진입 여부 확인
+        final hasSeenTutorial = await GuardianTutorialHelper.isCompleted();
+        
+        if (hasSeenTutorial) {
+          // 이미 본 경우 바로 홈 화면으로
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => GuardianHomeScreen(user: user)),
+          );
+        } else {
+          // 처음인 경우 튜토리얼 표시
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const GuardianTutorialScreen(),
+            ),
+          );
+        }
       } else {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const TherapistHomeScreen()),
@@ -542,7 +557,7 @@ class _LoginScreenDesktopState extends State<_LoginScreenDesktop> {
                           ],
                         ),
                         child: Icon(
-                          Icons.water_drop,
+                          Icons.waves,
                           size: 50,
                           color: Colors.blue.shade700,
                         ),
@@ -928,9 +943,22 @@ class _LoginScreenDesktopState extends State<_LoginScreenDesktop> {
       if (!mounted) return;
 
       if (user.role == UserRole.guardian) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const GuardianHomeScreen()),
-        );
+        // 보호자의 경우 첫 진입 여부 확인
+        final hasSeenTutorial = await GuardianTutorialHelper.isCompleted();
+        
+        if (hasSeenTutorial) {
+          // 이미 본 경우 바로 홈 화면으로
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => GuardianHomeScreen(user: user)),
+          );
+        } else {
+          // 처음인 경우 튜토리얼 표시
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const GuardianTutorialScreen(),
+            ),
+          );
+        }
       } else {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const TherapistHomeScreen()),
