@@ -48,10 +48,20 @@ class GuardianWelcomeTutorial extends StatelessWidget {
                     color: const Color(0xFF1976D2).withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.water_drop,
-                    size: 60,
-                    color: Color(0xFF1976D2),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/app_icon.png',
+                      width: 100,
+                      height: 100,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.water_drop,
+                          size: 60,
+                          color: Color(0xFF1976D2),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),

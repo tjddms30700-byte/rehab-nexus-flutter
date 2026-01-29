@@ -107,10 +107,21 @@ class _LoginScreenMobileState extends State<_LoginScreenMobile> {
               ),
             ],
           ),
-          child: const Icon(
-            Icons.waves,
-            size: 40,
-            color: Colors.white,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Image.asset(
+              'assets/app_icon.png',
+              width: 80,
+              height: 80,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(
+                  Icons.waves,
+                  size: 40,
+                  color: Colors.white,
+                );
+              },
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -556,10 +567,21 @@ class _LoginScreenDesktopState extends State<_LoginScreenDesktop> {
                             ),
                           ],
                         ),
-                        child: Icon(
-                          Icons.waves,
-                          size: 50,
-                          color: Colors.blue.shade700,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Image.asset(
+                            'assets/app_icon.png',
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.waves,
+                                size: 50,
+                                color: Colors.blue.shade700,
+                              );
+                            },
+                          ),
                         ),
                       ),
                       const SizedBox(height: 40),
