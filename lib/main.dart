@@ -7,6 +7,8 @@ import 'providers/app_state.dart';
 import 'screens/login_screen.dart';
 import 'screens/assessment_input_screen.dart';
 import 'screens/content_recommendation_screen.dart';
+import 'screens/invite_code_screen.dart';
+import 'screens/signup_screen.dart';
 import 'models/patient.dart';
 
 void main() async {
@@ -38,6 +40,7 @@ class MyApp extends StatelessWidget {
         home: const LoginScreen(),
         routes: {
           '/login': (context) => const LoginScreen(),
+          '/invite-code': (context) => const InviteCodeScreen(),
         },
         onGenerateRoute: (settings) {
           // 동적 라우팅 처리

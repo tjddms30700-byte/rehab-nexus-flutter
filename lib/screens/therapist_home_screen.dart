@@ -14,6 +14,7 @@ import 'payment_list_screen.dart';
 // 임상 기능 화면 추가
 import 'clinical_feature_patient_selector.dart';
 import 'admin_settings_screen.dart';
+import 'invite_management_screen.dart';
 
 /// 치료사 홈 화면 - 반응형 웹/모바일
 class TherapistHomeScreen extends StatelessWidget {
@@ -272,14 +273,20 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                 const Divider(height: 24),
                 
                 // ========================================
-                // 환경설정 (센터장 전용)
+                // 관리자 메뉴 (센터장 전용)
                 // ========================================
-                if (user.role == 'ADMIN')
+                if (user.role == 'ADMIN') ...[
+                  _buildSidebarMenuItem(
+                    icon: Icons.mail,
+                    title: '초대 관리',
+                    value: 'invites',
+                  ),
                   _buildSidebarMenuItem(
                     icon: Icons.settings,
                     title: '환경설정',
                     value: 'settings',
                   ),
+                ],
               ],
             ),
           ),
@@ -468,6 +475,8 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
       case 'content': return '콘텐츠 추천';
       case 'session': return '세션 기록';
       case 'progress': return '성과 추이';
+      // 관리자
+      case 'invites': return '초대 관리';
       case 'settings': return '환경설정';
       default: return '대시보드';
     }
@@ -494,6 +503,8 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
       case 'content': return '환자에게 맞는 콘텐츠를 추천하세요';
       case 'session': return '세션 기록을 작성하세요';
       case 'progress': return '환자의 성과 추이를 확인하세요';
+      // 관리자
+      case 'invites': return '팀원과 보호자를 초대하고 관리하세요';
       default: return '';
     }
   }
@@ -543,6 +554,9 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
         break;
       case 'settings':
         content = const AdminSettingsScreen();
+        break;
+      case 'invites':
+        content = const InviteManagementScreen();
         break;
       
       // ========================================

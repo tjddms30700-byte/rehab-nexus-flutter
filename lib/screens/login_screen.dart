@@ -145,6 +145,23 @@ class _LoginScreenMobileState extends State<_LoginScreenMobile> {
               child: const Text('로그인', style: TextStyle(fontSize: 18)),
             ),
           ),
+          const SizedBox(height: 16),
+          // 초대코드로 가입하기 버튼
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pushNamed(context, '/invite-code');
+              },
+              icon: const Icon(Icons.mail_outline),
+              label: const Text('초대코드로 가입하기', style: TextStyle(fontSize: 16)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue,
+                side: const BorderSide(color: Colors.blue, width: 2),
+              ),
+            ),
+          ),
         ],
       ),
     );
