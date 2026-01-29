@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../models/user.dart';
+import '../constants/user_roles.dart';
 import '../utils/responsive_layout.dart';
 import 'patient_registration_screen.dart';
 import 'calendar_schedule_screen.dart';
@@ -329,7 +330,9 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                 // ========================================
                 // 관리자 메뉴 (센터장 전용)
                 // ========================================
-                if (user.role == 'ADMIN') ...[
+                if (user.hasAnyRole([UserRole.superAdmin, UserRole.centerAdmin]) || 
+                    user.roles['owner'] == true || 
+                    user.roles['admin'] == true) ...[
                   _buildSidebarMenuItem(
                     icon: Icons.mail,
                     title: '초대 관리',
@@ -510,7 +513,10 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
       {'icon': Icons.lightbulb_outline, 'title': '콘텐츠 추천', 'value': 'content'},
       {'icon': Icons.edit_note, 'title': '세션 기록', 'value': 'session'},
       {'icon': Icons.trending_up, 'title': '성과 추이', 'value': 'progress'},
-      if (user.role == 'ADMIN') ...[
+      // ✅ 관리자 메뉴 (OR 조건)
+      if (user.hasAnyRole([UserRole.superAdmin, UserRole.centerAdmin]) || 
+          user.roles['owner'] == true || 
+          user.roles['admin'] == true) ...[
         {'icon': Icons.mail, 'title': '초대 관리', 'value': 'invites'},
         {'icon': Icons.settings, 'title': '환경설정', 'value': 'settings'},
       ],
