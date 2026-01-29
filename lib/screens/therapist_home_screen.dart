@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
+import '../models/user.dart';
 import '../utils/responsive_layout.dart';
 import 'patient_registration_screen.dart';
 import 'calendar_schedule_screen.dart';
+import 'schedule_mobile_screen.dart';
 import 'patient_management_screen.dart';
 import 'notice_list_screen.dart';
 import 'file_library_screen.dart';
@@ -61,11 +63,29 @@ class _TherapistHomeMobile extends StatelessWidget {
       children: [
         _buildWelcomeCard(context, user),
         const SizedBox(height: 24),
-        _buildOperationsSection(context),
+        _buildOperationsSection(context, user),
         const SizedBox(height: 24),
         _buildClinicalSection(context),
       ],
     );
+  }
+}
+
+/// 역할에 따른 호칭 반환
+String _getRoleTitle(dynamic role) {
+  final roleString = role.toString().split('.').last;
+  switch (roleString) {
+    case 'superAdmin':
+    case 'centerAdmin':
+      return '센터장님';
+    case 'therapist':
+      return '치료사님';
+    case 'guardian':
+      return '보호자님';
+    case 'doctor':
+      return '의료진님';
+    default:
+      return '님';
   }
 }
 
@@ -877,7 +897,7 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '안녕하세요, ${user.name} 치료사님 👋',
+                        '안녕하세요, ${user.name} ${_getRoleTitle(user.role)} 👋',
                         style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
@@ -1142,7 +1162,7 @@ Widget _buildWelcomeCard(BuildContext context, dynamic user) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '안녕하세요, ${user.name} 치료사님',
+            '안녕하세요, ${user.name} ${_getRoleTitle(user.role)}',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
@@ -1156,7 +1176,7 @@ Widget _buildWelcomeCard(BuildContext context, dynamic user) {
   );
 }
 
-Widget _buildOperationsSection(BuildContext context) {
+Widget _buildOperationsSection(BuildContext context, AppUser user) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1179,7 +1199,7 @@ Widget _buildOperationsSection(BuildContext context) {
             title: '일정 관리',
             subtitle: '예약 및 출석',
             color: Colors.blue,
-            screen: const CalendarScheduleScreen(),
+            screen: ScheduleMobileScreen(user: user),
           ),
           _buildFeatureCard(
             context,
