@@ -533,6 +533,13 @@ class _LoginScreenDesktopState extends State<_LoginScreenDesktop> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 30,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
                         ),
                         child: Icon(
                           Icons.water_drop,
@@ -581,44 +588,61 @@ class _LoginScreenDesktopState extends State<_LoginScreenDesktop> {
           // 우측: 로그인 폼
           Expanded(
             flex: 5,
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(60),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // 제목
-                      const Text(
-                        '로그인',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A1A1A),
+            child: Container(
+              color: Colors.grey.shade50,
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(60),
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    padding: const EdgeInsets.all(40),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 30,
+                          offset: const Offset(0, 10),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '계정에 로그인하여 시작하세요',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF666666),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 제목
+                        const Text(
+                          '로그인',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A1A1A),
+                            letterSpacing: -0.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 40),
-                      
-                      // 로그인 폼 (모바일과 동일한 구조)
-                      _buildLoginFormDesktop(),
-                      
-                      const SizedBox(height: 24),
-                      
-                      _buildBottomActionsDesktop(),
-                      
-                      const SizedBox(height: 32),
-                      
-                      _buildInfoMessageDesktop(),
-                    ],
+                        const SizedBox(height: 12),
+                        const Text(
+                          '계정에 로그인하여 시작하세요',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFF666666),
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                        
+                        // 로그인 폼 (모바일과 동일한 구조)
+                        _buildLoginFormDesktop(),
+                        
+                        const SizedBox(height: 24),
+                        
+                        _buildBottomActionsDesktop(),
+                        
+                        const SizedBox(height: 32),
+                        
+                        _buildInfoMessageDesktop(),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -631,16 +655,32 @@ class _LoginScreenDesktopState extends State<_LoginScreenDesktop> {
 
   Widget _buildFeatureItem(String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, color: Colors.white, size: 20),
-          const SizedBox(width: 12),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 16,
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.check_circle,
               color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 17,
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -0.3,
+              ),
             ),
           ),
         ],
