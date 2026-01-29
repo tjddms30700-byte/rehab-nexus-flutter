@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:provider/provider.dart';
 import '../models/appointment.dart';
 import '../models/patient.dart';
 import '../constants/enums.dart';
 import '../services/appointment_service.dart';
 import '../services/patient_service.dart';
+import '../providers/app_state.dart';
 import '../widgets/create_appointment_dialog.dart'; // 새 다이얼로그 import
 
 /// 새로운 일정관리 화면 - 캘린더 + 치료사별 시간표
@@ -186,8 +188,16 @@ class _CalendarScheduleScreenState extends State<CalendarScheduleScreen> {
   /// 환자 목록 로드
   Future<void> _loadPatients() async {
     try {
+      final appState = context.read<AppState>();
+      final currentUser = appState.currentUser;
+      
+      if (currentUser == null) {
+        throw Exception('로그인이 필요합니다');
+      }
+
       final snapshot = await FirebaseFirestore.instance
           .collection('patients')
+          .where('organization_id', isEqualTo: currentUser.organizationId)
           .where('status', isEqualTo: 'ACTIVE')
           .get();
 

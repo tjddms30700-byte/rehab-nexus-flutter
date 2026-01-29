@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_state.dart';
 import 'patient_registration_screen.dart';
 
 /// 이용자 관리 화면 (파일 업로드, 수정, 삭제, 프로그램 현황 포함)
@@ -29,8 +31,16 @@ class _PatientManagementScreenState extends State<PatientManagementScreen> {
     });
 
     try {
+      final appState = context.read<AppState>();
+      final currentUser = appState.currentUser;
+      
+      if (currentUser == null) {
+        throw Exception('로그인이 필요합니다');
+      }
+
       final snapshot = await FirebaseFirestore.instance
           .collection('patients')
+          .where('organization_id', isEqualTo: currentUser.organizationId)
           .where('status', isEqualTo: 'ACTIVE')
           .get();
 

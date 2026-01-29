@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import '../models/patient.dart';
 import '../constants/enums.dart';
+import '../providers/app_state.dart';
 import 'assessment_input_screen.dart';
 import 'session_record_screen.dart';
 import 'goal_list_screen.dart';
@@ -38,8 +40,16 @@ class _ClinicalFeaturePatientSelectorState extends State<ClinicalFeaturePatientS
     });
 
     try {
+      final appState = context.read<AppState>();
+      final currentUser = appState.currentUser;
+      
+      if (currentUser == null) {
+        throw Exception('로그인이 필요합니다');
+      }
+
       final snapshot = await FirebaseFirestore.instance
           .collection('patients')
+          .where('organization_id', isEqualTo: currentUser.organizationId)
           .where('status', isEqualTo: 'ACTIVE')
           .get();
 
