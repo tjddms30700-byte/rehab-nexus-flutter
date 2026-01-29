@@ -328,7 +328,10 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => GuardianReportScreen(patient: _myPatients.first),
+                  builder: (context) => GuardianReportScreen(
+                    user: widget.user,
+                    patientId: _myPatients.first.id,
+                  ),
                 ),
               );
             }
