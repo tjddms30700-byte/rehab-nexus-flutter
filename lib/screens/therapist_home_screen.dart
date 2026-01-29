@@ -516,7 +516,14 @@ class _TherapistHomeDesktopState extends State<_TherapistHomeDesktop> {
     
     switch (_selectedMenu) {
       case 'dashboard':
-        content = RoleBasedDashboard(user: user);
+        content = RoleBasedDashboard(
+          user: user,
+          onNavigate: (menu) {
+            setState(() {
+              _selectedMenu = menu;
+            });
+          },
+        );
         break;
       case 'schedule':
         content = const CalendarScheduleScreen();

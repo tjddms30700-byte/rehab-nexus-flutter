@@ -11,8 +11,13 @@ import '../constants/enums.dart';
 /// 센터장/관리자: 운영 현황 + 오늘 할 일
 class RoleBasedDashboard extends StatefulWidget {
   final AppUser user;
+  final Function(String)? onNavigate; // 메뉴 이동 콜백
 
-  const RoleBasedDashboard({super.key, required this.user});
+  const RoleBasedDashboard({
+    super.key, 
+    required this.user,
+    this.onNavigate,
+  });
 
   @override
   State<RoleBasedDashboard> createState() => _RoleBasedDashboardState();
@@ -28,6 +33,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   int _todayPendingCount = 0;
   int _unpaidCount = 0;
   int _activeFixedSchedules = 0;
+  int _unfinishedSessions = 0;
+  int _goalsToReview = 0;
+  int _makeupRequests = 0;
 
   @override
   void initState() {
@@ -72,19 +80,88 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           _todayAppointments.where((a) => a.attended).length;
       _todayPendingCount = _todayAppointments
           .where((a) =>
-              a.status == 'pending' ||
+              a.status == AppointmentStatus.pending ||
               (!a.attended && a.appointmentDate.isBefore(DateTime.now())))
           .length;
 
-      // TODO: 실제 미수납 건수, 고정수업 수 조회
-      _unpaidCount = 0;
-      _activeFixedSchedules = 0;
+      // 실제 미수납 건수 조회
+      await _loadUnpaidCount();
+      
+      // 고정수업 수 조회
+      await _loadActiveFixedSchedules();
+      
+      // 세션 기록 미완 조회 (치료사만)
+      if (widget.user.role == UserRole.therapist) {
+        await _loadUnfinishedSessions();
+      }
+      
+      // 보강 요청 조회 (센터장/관리자만)
+      if (widget.user.role == UserRole.centerAdmin || widget.user.role == UserRole.superAdmin) {
+        await _loadMakeupRequests();
+      }
 
       setState(() => _isLoading = false);
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+  
+  Future<void> _loadUnpaidCount() async {
+    try {
+      // payments 컬렉션에서 미수납 건수 조회
+      final unpaidSnapshot = await FirebaseFirestore.instance
+          .collection('payments')
+          .where('payment_status', isEqualTo: 'pending')
+          .get();
+      
+      _unpaidCount = unpaidSnapshot.docs.length;
+    } catch (e) {
+      _unpaidCount = 0;
+    }
+  }
+  
+  Future<void> _loadActiveFixedSchedules() async {
+    try {
+      // fixed_schedules 컬렉션에서 활성 고정수업 조회
+      final fixedSchedulesSnapshot = await FirebaseFirestore.instance
+          .collection('fixed_schedules')
+          .where('status', isEqualTo: 'active')
+          .get();
+      
+      _activeFixedSchedules = fixedSchedulesSnapshot.docs.length;
+    } catch (e) {
+      _activeFixedSchedules = 0;
+    }
+  }
+  
+  Future<void> _loadUnfinishedSessions() async {
+    try {
+      // 오늘 출석 완료했지만 세션 기록이 없는 예약
+      _unfinishedSessions = _todayAppointments
+          .where((a) => a.attended && !a.sessionRecorded)
+          .length;
+      
+      // TODO: 목표 점검 대상은 별도 로직 필요
+      _goalsToReview = 0;
+    } catch (e) {
+      _unfinishedSessions = 0;
+      _goalsToReview = 0;
+    }
+  }
+  
+  Future<void> _loadMakeupRequests() async {
+    try {
+      // makeup_tickets 컬렉션에서 승인 대기 중인 보강권 조회
+      final makeupSnapshot = await FirebaseFirestore.instance
+          .collection('makeup_tickets')
+          .where('status', isEqualTo: 'pending')
+          .get();
+      
+      _makeupRequests = makeupSnapshot.docs.length;
+    } catch (e) {
+      _makeupRequests = 0;
     }
   }
 
@@ -252,10 +329,10 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
 
     return InkWell(
       onTap: () {
-        // TODO: 일정 상세 / 일정관리 패널 오픈
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${appointment.patientName} 일정 상세')),
-        );
+        // 일정관리 화면으로 이동
+        if (widget.onNavigate != null) {
+          widget.onNavigate!('schedule');
+        }
       },
       borderRadius: BorderRadius.circular(12),
       child: Container(
@@ -332,11 +409,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   }
 
   Widget _buildClinicalTasks() {
-    // TODO: 실제 임상 작업 데이터 연동
-    final unfinishedSessions = 1;
-    final goalsToReview = 1;
-
-    if (unfinishedSessions == 0 && goalsToReview == 0) {
+    if (_unfinishedSessions == 0 && _goalsToReview == 0) {
       return const SizedBox.shrink();
     }
 
@@ -352,32 +425,30 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           ),
         ),
         const SizedBox(height: 12),
-        if (unfinishedSessions > 0)
+        if (_unfinishedSessions > 0)
           _buildTaskCard(
             icon: Icons.description,
             iconColor: const Color(0xFFFF9800),
             title: '세션 기록 미완',
-            subtitle: '$unfinishedSessions건',
+            subtitle: '$_unfinishedSessions건',
             onTap: () {
-              // TODO: 세션 기록 화면
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('세션 기록 화면으로 이동합니다')),
-              );
+              if (widget.onNavigate != null) {
+                widget.onNavigate!('session');
+              }
             },
           ),
-        if (unfinishedSessions > 0 && goalsToReview > 0)
+        if (_unfinishedSessions > 0 && _goalsToReview > 0)
           const SizedBox(height: 12),
-        if (goalsToReview > 0)
+        if (_goalsToReview > 0)
           _buildTaskCard(
             icon: Icons.flag,
             iconColor: const Color(0xFF4CAF50),
             title: '목표 점검 대상',
-            subtitle: '$goalsToReview명',
+            subtitle: '$_goalsToReview명',
             onTap: () {
-              // TODO: 목표 관리 화면
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('목표 관리 화면으로 이동합니다')),
-              );
+              if (widget.onNavigate != null) {
+                widget.onNavigate!('goals');
+              }
             },
           ),
       ],
@@ -405,10 +476,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                 label: '오늘 일정',
                 color: const Color(0xFF2196F3),
                 onTap: () {
-                  // TODO: 일정 관리 화면
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('일정 관리 화면으로 이동합니다')),
-                  );
+                  if (widget.onNavigate != null) {
+                    widget.onNavigate!('schedule');
+                  }
                 },
               ),
             ),
@@ -419,10 +489,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                 label: '환자 검색',
                 color: const Color(0xFF4CAF50),
                 onTap: () {
-                  // TODO: 환자 검색 화면
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('환자 검색 화면으로 이동합니다')),
-                  );
+                  if (widget.onNavigate != null) {
+                    widget.onNavigate!('patients');
+                  }
                 },
               ),
             ),
@@ -433,10 +502,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                 label: '세션 기록',
                 color: const Color(0xFFFF9800),
                 onTap: () {
-                  // TODO: 세션 기록 작성
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('세션 기록 작성으로 이동합니다')),
-                  );
+                  if (widget.onNavigate != null) {
+                    widget.onNavigate!('session');
+                  }
                 },
               ),
             ),
@@ -661,10 +729,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   }
 
   Widget _buildAdminTasks() {
-    // TODO: 실제 데이터 연동
     final pendingAttendance = _todayPendingCount;
     final unpaid = _unpaidCount;
-    final makeupRequests = 0;
+    final makeupRequests = _makeupRequests;
 
     if (pendingAttendance == 0 && unpaid == 0 && makeupRequests == 0) {
       return Container(
@@ -714,10 +781,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
             title: '출석 미처리',
             subtitle: '$pendingAttendance건',
             onTap: () {
-              // TODO: 일정관리로 이동
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('일정 관리 화면으로 이동합니다')),
-              );
+              if (widget.onNavigate != null) {
+                widget.onNavigate!('schedule');
+              }
             },
           ),
         if (pendingAttendance > 0 && unpaid > 0) const SizedBox(height: 12),
@@ -728,10 +794,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
             title: '미수납',
             subtitle: '$unpaid건',
             onTap: () {
-              // TODO: 수납관리로 이동
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('수납 관리 화면으로 이동합니다')),
-              );
+              if (widget.onNavigate != null) {
+                widget.onNavigate!('payment');
+              }
             },
           ),
         if (unpaid > 0 && makeupRequests > 0) const SizedBox(height: 12),
@@ -742,10 +807,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
             title: '보강 요청',
             subtitle: '$makeupRequests건',
             onTap: () {
-              // TODO: 보강관리로 이동
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('보강 관리 화면으로 이동합니다')),
-              );
+              if (widget.onNavigate != null) {
+                widget.onNavigate!('makeup');
+              }
             },
           ),
       ],
@@ -770,10 +834,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           title: '오늘 일정 보기',
           color: const Color(0xFF2196F3),
           onTap: () {
-            // TODO: 일정 관리
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('일정 관리 화면으로 이동합니다')),
-            );
+            if (widget.onNavigate != null) {
+              widget.onNavigate!('schedule');
+            }
           },
         ),
         const SizedBox(height: 12),
@@ -782,10 +845,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           title: '수납 관리',
           color: const Color(0xFF4CAF50),
           onTap: () {
-            // TODO: 수납 관리
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('수납 관리 화면으로 이동합니다')),
-            );
+            if (widget.onNavigate != null) {
+              widget.onNavigate!('payment');
+            }
           },
         ),
         const SizedBox(height: 12),
@@ -794,10 +856,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           title: '이용자 관리',
           color: const Color(0xFFFF9800),
           onTap: () {
-            // TODO: 이용자 관리
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('이용자 관리 화면으로 이동합니다')),
-            );
+            if (widget.onNavigate != null) {
+              widget.onNavigate!('patients');
+            }
           },
         ),
       ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/makeup_ticket.dart';
 import '../constants/app_theme.dart';
 import '../constants/enums.dart';
@@ -14,6 +15,7 @@ class MakeupTicketListScreen extends StatefulWidget {
 
 class _MakeupTicketListScreenState extends State<MakeupTicketListScreen> {
   List<MakeupTicket> _tickets = [];
+  Map<String, bool> _isPendingMap = {}; // 보강권별 pending 상태 저장
   bool _isLoading = false;
   String _filterStatus = 'ALL'; // ALL, AVAILABLE, USED, EXPIRED
 
@@ -23,62 +25,74 @@ class _MakeupTicketListScreenState extends State<MakeupTicketListScreen> {
     _loadTickets();
   }
 
-  void _loadTickets() {
+  void _loadTickets() async {
     setState(() {
       _isLoading = true;
     });
 
-    // Mock 데이터 생성
-    final now = DateTime.now();
-    _tickets = [
-      MakeupTicket(
-        id: 'makeup_001',
-        patientId: 'patient_001',
-        patientName: '홍길동',
-        originalAttendanceId: 'att_001',
-        originalDate: now.subtract(const Duration(days: 7)),
-        originalTimeSlot: '10:00-11:00',
-        status: MakeupTicketStatus.available,
-        expiryDate: now.add(const Duration(days: 23)),
-        therapistId: 'therapist_001',
-        therapistName: '김치료',
-        notes: '독감으로 인한 결석',
-        createdAt: now.subtract(const Duration(days: 7)),
-      ),
-      MakeupTicket(
-        id: 'makeup_002',
-        patientId: 'patient_002',
-        patientName: '김영희',
-        originalAttendanceId: 'att_002',
-        originalDate: now.subtract(const Duration(days: 15)),
-        originalTimeSlot: '14:00-15:00',
-        status: MakeupTicketStatus.used,
-        expiryDate: now.add(const Duration(days: 15)),
-        therapistId: 'therapist_001',
-        therapistName: '김치료',
-        notes: '가족 행사로 결석',
-        usedDate: now.subtract(const Duration(days: 3)),
-        createdAt: now.subtract(const Duration(days: 15)),
-      ),
-      MakeupTicket(
-        id: 'makeup_003',
-        patientId: 'patient_003',
-        patientName: '이철수',
-        originalAttendanceId: 'att_003',
-        originalDate: now.subtract(const Duration(days: 35)),
-        originalTimeSlot: '16:00-17:00',
-        status: MakeupTicketStatus.expired,
-        expiryDate: now.subtract(const Duration(days: 5)),
-        therapistId: 'therapist_001',
-        therapistName: '김치료',
-        notes: '급한 일정으로 결석',
-        createdAt: now.subtract(const Duration(days: 35)),
-      ),
-    ];
+    try {
+      // Firestore에서 보강권 데이터 조회
+      Query query = FirebaseFirestore.instance.collection('makeup_tickets');
+      
+      // 필터 적용
+      if (_filterStatus != 'ALL') {
+        query = query.where('status', isEqualTo: _filterStatus.toLowerCase());
+      }
+      
+      final snapshot = await query.orderBy('created_at', descending: true).get();
+      
+      _tickets = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        
+        // pending 상태 저장
+        final status = data['status'] as String?;
+        _isPendingMap[doc.id] = (status == 'pending');
+        
+        return MakeupTicket(
+          id: doc.id,
+          patientId: data['patient_id'] ?? '',
+          patientName: data['patient_name'] ?? '',
+          originalAttendanceId: data['original_attendance_id'] ?? '',
+          originalDate: (data['original_date'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          originalTimeSlot: data['original_time_slot'] ?? '',
+          status: _parseStatus(status),
+          expiryDate: (data['expiry_date'] as Timestamp?)?.toDate() ?? DateTime.now().add(const Duration(days: 30)),
+          therapistId: data['therapist_id'] ?? '',
+          therapistName: data['therapist_name'] ?? '',
+          notes: data['notes'],
+          createdAt: (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          usedDate: (data['used_date'] as Timestamp?)?.toDate(),
+        );
+      }).toList();
+      
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('데이터 로드 실패: $e')),
+        );
+      }
+    }
 
     setState(() {
       _isLoading = false;
     });
+  }
+  
+  MakeupTicketStatus _parseStatus(String? status) {
+    switch (status) {
+      case 'pending':
+        return MakeupTicketStatus.available;
+      case 'approved':
+        return MakeupTicketStatus.available;
+      case 'used':
+        return MakeupTicketStatus.used;
+      case 'expired':
+        return MakeupTicketStatus.expired;
+      case 'cancelled':
+        return MakeupTicketStatus.expired;
+      default:
+        return MakeupTicketStatus.available;
+    }
   }
 
   List<MakeupTicket> get _filteredTickets {
@@ -301,7 +315,36 @@ class _MakeupTicketListScreenState extends State<MakeupTicketListScreen> {
               const SizedBox(height: 8),
               _buildInfoRow(Icons.notes, '사유', ticket.notes!),
             ],
-            if (ticket.status == MakeupTicketStatus.available) ...[
+            // Pending 상태: 승인/거절 버튼
+            if (_isPendingMap[ticket.id] == true) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _rejectMakeupTicket(ticket),
+                    icon: const Icon(Icons.cancel, size: 18),
+                    label: const Text('거절'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _approveMakeupTicket(ticket),
+                    icon: const Icon(Icons.check_circle, size: 18),
+                    label: const Text('승인'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            // Available 상태: 사용하기 버튼
+            if (ticket.status == MakeupTicketStatus.available && _isPendingMap[ticket.id] != true) ...[
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -370,6 +413,109 @@ class _MakeupTicketListScreenState extends State<MakeupTicketListScreen> {
       case MakeupTicketStatus.expired:
         return '만료';
     }
+  }
+
+  
+  Future<void> _approveMakeupTicket(MakeupTicket ticket) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('makeup_tickets')
+          .doc(ticket.id)
+          .update({
+        'status': 'approved',
+        'approved_at': Timestamp.now(),
+        'updated_at': Timestamp.now(),
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${ticket.patientName}의 보강권이 승인되었습니다'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadTickets();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('승인 실패: $e')),
+        );
+      }
+    }
+  }
+  
+  Future<void> _rejectMakeupTicket(MakeupTicket ticket) async {
+    // 거절 사유 입력 다이얼로그
+    final TextEditingController reasonController = TextEditingController();
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('보강권 거절'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${ticket.patientName}의 보강권을 거절하시겠습니까?'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: '거절 사유 (선택)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('거절'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('makeup_tickets')
+            .doc(ticket.id)
+            .update({
+          'status': 'cancelled',
+          'rejection_reason': reasonController.text.trim(),
+          'rejected_at': Timestamp.now(),
+          'updated_at': Timestamp.now(),
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${ticket.patientName}의 보강권이 거절되었습니다'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          _loadTickets();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('거절 실패: $e')),
+          );
+        }
+      }
+    }
+    
+    reasonController.dispose();
   }
 
   void _showUseTicketDialog(MakeupTicket ticket) {
