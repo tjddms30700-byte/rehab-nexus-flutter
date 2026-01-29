@@ -54,10 +54,10 @@ class _GuardianHomeScreenState extends State<GuardianHomeScreen> {
     try {
       final user = widget.user;
 
-      // 1. 내 환자 목록 불러오기 (guardians 배열에 내 user.id가 포함된 환자)
+      // 1. 내 환자 목록 불러오기 (guardian_uids 배열에 내 user.id가 포함된 환자)
       final patientsSnapshot = await _firestore
           .collection('patients')
-          .where('guardians', arrayContains: user.id)
+          .where('guardian_uids', arrayContains: user.id)
           .get();
 
       _myPatients = patientsSnapshot.docs
