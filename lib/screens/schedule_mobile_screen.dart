@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/appointment.dart';
 import '../models/user.dart';
+import '../models/patient.dart';
 import '../constants/user_roles.dart';
 import '../constants/enums.dart';
 
@@ -38,6 +39,7 @@ class _ScheduleMobileScreenState extends State<ScheduleMobileScreen> {
       final endOfDay = startOfDay.add(const Duration(days: 1));
       
       Query query = _firestore.collection('appointments')
+          .where('organization_id', isEqualTo: widget.user.organizationId)
           .where('appointment_date', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
           .where('appointment_date', isLessThan: Timestamp.fromDate(endOfDay));
       
@@ -603,24 +605,54 @@ class _ScheduleMobileScreenState extends State<ScheduleMobileScreen> {
   
   Future<void> _markAttendance(Appointment appointment, bool attended) async {
     try {
+      // 1. 예약 상태 업데이트
       await _firestore.collection('appointments').doc(appointment.id).update({
-        'status': attended ? 'completed' : 'cancelled',
+        'status': attended ? 'checkedIn' : 'cancelled',
         'attended': attended,
         'updated_at': Timestamp.now(),
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(attended ? '출석 처리 완료' : '결석 처리 완료'),
-          backgroundColor: attended ? Colors.green : Colors.orange,
-        ),
-      );
+      // 2. 출석 처리 시 patient_stats 업데이트 (totalVisits 증가)
+      if (attended) {
+        final statsRef = _firestore.collection('patient_stats').doc(appointment.patientId);
+        await _firestore.runTransaction((transaction) async {
+          final statsSnapshot = await transaction.get(statsRef);
+          if (statsSnapshot.exists) {
+            final currentVisits = statsSnapshot.data()?['totalVisits'] as int? ?? 0;
+            transaction.update(statsRef, {
+              'totalVisits': currentVisits + 1,
+              'updated_at': Timestamp.now(),
+            });
+          } else {
+            // patient_stats가 없으면 생성
+            transaction.set(statsRef, {
+              'patient_id': appointment.patientId,
+              'totalVisits': 1,
+              'remainingCount': 0,
+              'unpaidCount': 0,
+              'created_at': Timestamp.now(),
+              'updated_at': Timestamp.now(),
+            });
+          }
+        });
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(attended ? '✅ 출석 처리 완료' : '❌ 결석 처리 완료'),
+            backgroundColor: attended ? Colors.green : Colors.orange,
+          ),
+        );
+      }
       
       _loadAppointments();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('처리 실패: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('처리 실패: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 }
